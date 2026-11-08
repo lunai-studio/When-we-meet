@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#07070B">
+  <title>WhenWeMeet · Find the day that works for everyone</title>
+  <meta name="description" content="Everyone marks their free days once. WhenWeMeet finds the overlap, you propose a plan at an exact time, and the group says yes. For couples, friends and clubs.">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap">
+</head>
+<body>
+  <div id="public"></div>
+
+  <div id="shell" hidden>
+    <div class="saving" id="saving" hidden>SAVING…</div>
+    <div class="wrap" id="app"></div>
+    <div class="brush" id="brush" hidden></div>
+    <button class="fab" id="fab" data-act="newPlan" hidden>+ New plan</button>
+    <nav class="nav" aria-label="Sections"><div class="nav-in" id="nav"></div></nav>
+    <div class="scrim" id="scrim" hidden data-act="closeSheet"></div>
+    <div class="sheet" id="sheet" hidden role="dialog" aria-modal="true"><div class="sheet-in" id="sheetIn"></div></div>
+  </div>
+  <div class="toast" id="toast" hidden></div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

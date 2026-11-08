@@ -1,0 +1,93 @@
+rules_version = '2';
+// Privacy model:
+// - users/{uid}: only you.
+// - groups/{gid} and everything under it: only members (uid in memberIds).
+// - You become a member by presenting a valid invite code (invites/{code}).
+// - invites can be fetched by code but never listed, so groups can't be discovered.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function me() { return request.auth.uid; }
+    function groupDoc(gid) { return get(/databases/$(database)/documents/groups/$(gid)); }
+    function isMemberOf(gid) { return signedIn() && me() in groupDoc(gid).data.memberIds; }
+    function onlyKeys(keys) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys); }
+
+    match /users/{uid} {
+      allow read, write: if signedIn() && me() == uid;
+    }
+
+    match /invites/{code} {
+      allow get: if signedIn();
+      allow list: if false;
+      allow create: if signedIn()
+        && request.resource.data.createdBy == me()
+        && me() in getAfter(/databases/$(database)/documents/groups/$(request.resource.data.gid)).data.memberIds;
+      allow update: if false;
+      allow delete: if isMemberOf(resource.data.gid);
+    }
+
+    match /groups/{gid} {
+      function wasMember() { return signedIn() && me() in resource.data.memberIds; }
+      function owner() { return signedIn() && resource.data.createdBy == me(); }
+      function membersTouchOnly(ids) { return request.resource.data.members.diff(resource.data.members).affectedKeys().hasOnly(ids); }
+      function newIds() { return request.resource.data.memberIds; }
+      function oldIds() { return resource.data.memberIds; }
+
+      allow read: if wasMember();
+
+      allow create: if signedIn()
+        && request.resource.data.createdBy == me()
+        && request.resource.data.memberIds == [me()]
+        && request.resource.data.members.keys().hasOnly([me()]);
+
+      // Members can edit the group's name/goals and their own member entry, and can leave.
+      allow update: if wasMember()
+        && request.resource.data.createdBy == resource.data.createdBy
+        && (
+          // no membership change: only your own entry in members
+          (newIds() == oldIds() && membersTouchOnly([me()]))
+          // leaving: remove only yourself
+          || (newIds().toSet() == oldIds().toSet().difference([me()].toSet()) && membersTouchOnly([me()]) && !(me() in request.resource.data.members))
+          // the creator may remove other members
+          || (owner() && oldIds().toSet().hasAll(newIds().toSet()) && newIds().size() < oldIds().size())
+        )
+        // only the creator can rotate the invite link
+        && (owner() || request.resource.data.get('inviteCode', '') == resource.data.get('inviteCode', ''));
+
+      // Joining with an invite code: add only yourself, touch nothing else.
+      allow update: if signedIn() && !wasMember()
+        && onlyKeys(['memberIds', 'members', 'joinCode'])
+        && newIds().toSet() == oldIds().toSet().union([me()].toSet())
+        && membersTouchOnly([me()])
+        && exists(/databases/$(database)/documents/invites/$(request.resource.data.joinCode))
+        && get(/databases/$(database)/documents/invites/$(request.resource.data.joinCode)).data.gid == gid;
+
+      allow delete: if owner();
+
+      match /avail/{uid} {
+        allow read: if isMemberOf(gid);
+        allow write: if isMemberOf(gid) && me() == uid;
+      }
+
+      match /plans/{pid} {
+        function boss() { return resource.data.createdBy == me() || groupDoc(gid).data.createdBy == me(); }
+        allow read: if isMemberOf(gid);
+        allow create: if isMemberOf(gid) && request.resource.data.createdBy == me();
+        allow update: if isMemberOf(gid) && (
+          boss()
+          // everyone else may only answer for themselves
+          || (onlyKeys(['votes', 'rsvp'])
+              && request.resource.data.get('votes', {}).diff(resource.data.get('votes', {})).affectedKeys().hasOnly([me()])
+              && request.resource.data.get('rsvp', {}).diff(resource.data.get('rsvp', {})).affectedKeys().hasOnly([me()]))
+        );
+        allow delete: if isMemberOf(gid) && boss();
+      }
+
+      match /comments/{cid} {
+        allow read: if isMemberOf(gid);
+        allow create: if isMemberOf(gid) && request.resource.data.by == me();
+        allow delete: if isMemberOf(gid) && resource.data.by == me();
+      }
+    }
+  }
+}
