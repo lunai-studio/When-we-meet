@@ -360,7 +360,7 @@ let lastTokenPlaying = -1;
 function playingAlive() { return lastTokenPlaying === V.token; }
 
 /* ---------- sign in ---------- */
-export function renderLogin(root, { hasBackend, invited, sent, error, busy }) {
+export function renderLogin(root, { hasBackend, invited, guest, sent, error, busy }) {
   stopLanding();
   root.innerHTML = `
   <header class="lnav"><div class="lwrap lnav-in">
@@ -369,9 +369,9 @@ export function renderLogin(root, { hasBackend, invited, sent, error, busy }) {
   </div></header>
   <main class="lwrap login">
     <div class="card stack login-card">
-      <div><span class="mono muted">${invited ? t('You’re invited') : t('Welcome')}</span>
-        <h1>${invited ? t('Sign in to join the group') : t('Sign in to WhenWeMeet')}</h1>
-        <p class="muted" style="margin:6px 0 0">${t('Your groups are private. Signing in is how we know which ones are yours.')}</p></div>
+      <div><span class="mono muted">${guest ? t('Guest') : invited ? t('You’re invited') : t('Welcome')}</span>
+        <h1>${guest ? t('Save your account') : invited ? t('Sign in to join the group') : t('Sign in to WhenWeMeet')}</h1>
+        <p class="muted" style="margin:6px 0 0">${guest ? t('Your groups, days and answers stay exactly as they are. You just get them back on any device.') : t('Your groups are private. Signing in is how we know which ones are yours.')}</p></div>
       ${!hasBackend ? `<div class="banner"><span class="mono tag">${t('Setup')}</span><div>${t('Accounts aren’t configured on this deployment yet (missing Firebase settings). You can still try the demo.')}</div></div>
         <a class="btn primary full" href="#/demo">${t('Try the demo')}</a>` : sent ? `
         <div class="banner"><span class="mono tag">${t('Sent')}</span><div>${t('Check your inbox: we sent a sign-in link to <b>{e}</b>. Open it on this device.', { e: esc(sent) })}</div></div>

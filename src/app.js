@@ -235,14 +235,25 @@ function header(inG) {
     </div></div>`;
 }
 function banners() {
+  if (isGuest() && myName() && myGroups().length) return saveAccountCard(t('You’re in as a guest on this device. Save your account with Google or your email to keep your groups if you change phone or clear the browser.'));
   if (S.mode === 'demo') return `<div class="banner"><span class="mono tag">${t('Demo')}</span><div>${t('Sample groups with example friends. <b>Nothing is saved</b> in this view.')} <a class="maplink" href="#/login">${t('Create your own group')}</a></div></div>`;
   return '';
 }
+const isGuest = () => live() && !!S.user?.isAnonymous;
 function joinCard() {
-  return `<div class="card stack"><div><span class="mono muted">${t('Welcome')}</span><h2 style="font-size:22px;margin-top:6px">${t('What should your friends call you?')}</h2>
-  <p class="muted" style="margin:6px 0 0">${S.pendingInvite ? t("Then we'll add you to the group you were invited to.") : t("Then create a group and invite your people.")}</p></div>
+  const inv = S.inviteInfo, emo = S.joinEmoji || (S.joinEmoji = S.profile?.emoji || defEmoji(S.me));
+  return `<div class="card stack">
+  ${inv ? `<div class="invite-hero"><span class="invite-emo">${esc(inv.emoji || '🎉')}</span><div><span class="mono muted">${t('You’re invited to')}</span><h2 style="font-size:22px;margin-top:4px">${esc(inv.groupName || '')}</h2></div></div>` : `<div><span class="mono muted">${t('Welcome')}</span></div>`}
+  <div><h2 style="font-size:${inv ? 18 : 22}px">${t('What should your friends call you?')}</h2>
+  <p class="muted" style="margin:6px 0 0">${inv ? t('No account needed. We’ll remember you on this device.') : t('Then create a group and invite your people.')}</p></div>
   <div class="field"><label for="joinName">${t('Your name')}</label><input class="input" id="joinName" maxlength="24" value="${esc(S.user?.displayName?.split(' ')[0] || '')}" placeholder="${esc(t('e.g. Michelle'))}" autocomplete="given-name"></div>
-  <button class="btn primary full" data-act="join">${t('Continue')}</button></div>`;
+  <div class="field"><span class="lbl">${t('Your emoji')}</span><div class="row emorow">${EMOJIS.map((e) => `<button class="emo-btn" data-act="joinEmoji" data-v="${e}" aria-pressed="${emo === e}">${e}</button>`).join('')}</div></div>
+  <button class="btn primary full" data-act="join">${inv ? t('Join {g}', { g: esc(inv.groupName || '') }) : t('Continue')}</button>
+  ${isGuest() ? `<p class="meta" style="margin:0;text-align:center">${t('Already use WhenWeMeet?')} <a class="maplink" href="#/login">${t('Sign in to keep everything in one place')}</a></p>` : ''}</div>`;
+}
+function saveAccountCard(why) {
+  return `<div class="banner guest"><span class="mono tag">${t('Guest')}</span><div>${why}
+    <div class="row" style="margin-top:8px"><a class="btn sm primary" href="#/login">${t('Save your account')}</a></div></div></div>`;
 }
 function groupsView(page) {
   const mine = myGroups(), can = editable();
@@ -252,12 +263,15 @@ function groupsView(page) {
       <div class="plan-row" style="align-items:center"><div class="faces">${memberIds(g).slice(0, 8).map((m) => faceHTML(m, g)).join('')}</div>
       <span class="meta">${t('{n} people', { n: memberIds(g).length })} · ${modeOf(S.me, g) === 'own' ? t('Own calendar') : t('Main calendar')}</span></div></button>`).join('')}</div>`
     : `<div class="empty">${t("You're not in any group yet.")}</div>`;
-  if (can) {
+  if (can && isGuest()) h += `<div class="sec-h"><h2>${t('Create a group')}</h2></div>` + saveAccountCard(t('Organizers need a saved account, so your group never gets lost. It takes 10 seconds with Google.'));
+  if (can && !isGuest()) {
     h += `<div class="sec-h"><h2>${t('Create a group')}</h2></div><div class="card stack" style="gap:10px">
       <div class="field"><label for="newGroup">${t('Group name')}</label><input class="input" id="newGroup" maxlength="40" placeholder="${esc(t('e.g. Dinner crew, Book club, Us two'))}"></div>
       <div class="field"><span class="lbl">${t('Icon')}</span><div class="row emorow">${GROUP_EMOJIS.map((e) => `<button class="emo-btn" data-act="newGEmoji" data-v="${e}" aria-pressed="${(S.newGEmoji || '🍻') === e}">${e}</button>`).join('')}</div></div>
       <button class="btn primary full" data-act="createGroup">${t('Create group')}</button>
       <p class="meta" style="margin:0">${t('Groups are private. Only people you send the invite link to can join and see it.')} ${t('You can be in as many groups as you like: your partner, your friends, your club.')}</p></div>`;
+  }
+  if (can) {
     h += `<div class="sec-h"><h2>${t('Got an invite?')}</h2></div><div class="card stack" style="gap:10px">
       <div class="field"><label for="inviteIn">${t('Invite link')}</label><input class="input" id="inviteIn" placeholder="https://…/#/join/…" autocomplete="off"></div>
       <button class="btn full" data-act="joinLink">${t('Join group')}</button></div>`;
@@ -480,6 +494,7 @@ function profileSheet() {
   return `<h2>${t('Your profile')}</h2>
   <div class="ppreview"><span class="avatar emo big" style="background:${d.color}">${d.emoji}</span><span class="meta">${t('This is how your friends see you in calendars and plans.')}</span></div>
   ${S.user?.email ? `<p class="meta" style="margin:0">${t('Signed in as {e}', { e: esc(S.user.email) })}</p>` : ''}
+  ${isGuest() ? saveAccountCard(t('You’re a guest on this device. Save your account to use WhenWeMeet on your other devices too.')) : ''}
   <div class="field"><label for="pName">${t('Your name')}</label><input class="input" id="pName" maxlength="24" value="${esc(myName())}"></div>
   <div class="field"><span class="lbl">${t('Your emoji')}</span><div class="row emorow">${EMOJIS.map((e) => `<button class="emo-btn" data-act="pEmoji" data-v="${e}" aria-pressed="${d.emoji === e}">${e}</button>`).join('')}</div></div>
   <div class="field"><span class="lbl">${t('Your color')}</span><div class="row">${PALETTE.map((c) => `<button class="cdot" data-act="pColor" data-v="${c}" style="background:${c}" aria-pressed="${d.color === c}" aria-label="${c}"></button>`).join('')}</div></div>
@@ -487,7 +502,7 @@ function profileSheet() {
   <div class="field"><span class="lbl">${t('Language')}</span><div class="seg" role="group"><button data-act="lang" data-v="en" aria-pressed="${LANG === 'en'}">English</button><button data-act="lang" data-v="es" aria-pressed="${LANG === 'es'}">Español</button></div></div>
   <p class="meta" style="margin:0">${t('Your main calendar is used in {n} of your {m} groups.', { n: mainUsers(S.me), m: myGroups().length })}</p>
   ${editable() ? `<button class="btn primary full" data-act="pSave">${t('Save')}</button>` : ''}
-  <div class="row"><a class="btn" href="#/">${t('How it works')}</a><button class="btn danger" data-act="signOut" style="margin-left:auto">${S.mode === 'demo' ? t('Exit demo') : t('Sign out')}</button></div>`;
+  <div class="row"><a class="btn" href="#/">${t('How it works')}</a><button class="btn danger" data-act="signOut" style="margin-left:auto">${S.mode === 'demo' ? t('Exit demo') : isGuest() ? t('Leave (as a guest you lose access)') : t('Sign out')}</button></div>`;
 }
 
 /* ---------- actions ---------- */
@@ -562,23 +577,29 @@ function switchGroup(id) {
 }
 function parseInvite(v) { v = (v || '').trim(); const m = v.match(/join\/([a-z0-9]+)/i); return m ? m[1] : /^[a-z0-9]{8,}$/i.test(v) ? v : null; }
 async function joinByCode(code) {
-  S.pendingInvite = null; try { localStorage.removeItem('wwm.invite'); } catch (e) {}
+  if (S.pendingInvite === code) { S.pendingInvite = null; S.inviteInfo = null; } try { localStorage.removeItem('wwm.invite'); } catch (e) {}
   if (S.mode === 'demo') { toast(t('Invites work in your real account, not in the demo.')); return; }
   let inv = null; try { inv = await B.get('invites/' + code); } catch (e) {}
   if (!inv) { toast(t('This invite link is not valid anymore. Ask for a new one.')); render(); return; }
-  if (S.groups[inv.gid]) { S.tab = 'home'; switchGroup(inv.gid); return; }
+  if (S.groups[inv.gid]) { S.tab = 'home'; switchGroup(inv.gid); maybeJoin(); return; }
   try {
     const me = { ...myLook(), joinedAt: Date.now(), availMode: 'main' };
     await B.update('groups/' + inv.gid, { memberIds: B.arrayUnion(S.me), ['members.' + S.me]: me, joinCode: code });
     await B.set(`groups/${inv.gid}/avail/${S.me}`, { days: S.profile?.mainDays || {}, updatedAt: Date.now() });
+    if (isGuest()) B.rememberGuestJoin(code);
     S.preferGid = inv.gid; S.tab = 'home';
     if (S.groups[inv.gid]) switchGroup(inv.gid); else { S.gid = inv.gid; rememberUI(); }
     toast(t('You joined {g}.', { g: inv.groupName || '' }));
   } catch (e) { writeError(e); }
   render();
 }
-function maybeJoin() { if (S.pendingInvite && live() && S.gotProfile && S.gotGroups && myName()) joinByCode(S.pendingInvite); }
-export function setPendingInvite(code) { S.pendingInvite = code; try { localStorage.setItem('wwm.invite', code); } catch (e) {} maybeJoin(); }
+function maybeJoin() {
+  if (!(live() && S.gotProfile && S.gotGroups && myName()) || S.joining) return;
+  const code = S.pendingInvite || S.inviteQueue?.shift(); if (!code) return;
+  S.joining = true; joinByCode(code).finally(() => { S.joining = false; maybeJoin(); });
+}
+async function loadInviteInfo(code) { try { S.inviteInfo = await B.get('invites/' + code); } catch (e) { S.inviteInfo = null; } render(); }
+export function setPendingInvite(code) { S.pendingInvite = code; try { localStorage.setItem('wwm.invite', code); } catch (e) {} if (live()) loadInviteInfo(code); maybeJoin(); }
 
 let onExit = () => {};
 document.addEventListener('input', (e) => {
@@ -679,7 +700,8 @@ document.addEventListener('click', (e) => {
     case 'theme': setTheme(v); if (live() && S.profile) W(() => B.update('users/' + S.me, { theme: v })); if (S.sheet) { const nm = $('#pName')?.value; renderSheet(); if (nm != null && $('#pName')) $('#pName').value = nm; } break;
     case 'newGEmoji': { S.newGEmoji = v; const nm = $('#newGroup')?.value; render(); if (S.sheet) renderSheet(); if ($('#newGroup')) $('#newGroup').value = nm || ''; break; }
     case 'gEmoji': S.gDraft.emoji = v; renderSheet(); break;
-    case 'join': { const n = $('#joinName').value.trim(); if (!n) { toast(t('Add a name first.')); $('#joinName').focus(); break; } saveLook({ name: n }); render(); maybeJoin(); break; }
+    case 'join': { const n = $('#joinName').value.trim(); if (!n) { toast(t('Add a name first.')); $('#joinName').focus(); break; } saveLook({ name: n, emoji: S.joinEmoji || person(S.me).emoji }); render(); maybeJoin(); break; }
+    case 'joinEmoji': { const nm = $('#joinName')?.value; S.joinEmoji = v; render(); if ($('#joinName')) $('#joinName').value = nm || ''; break; }
     case 'signOut': closeSheet(); onExit(); break;
     case 'closeSheet': closeSheet(); break;
   }
@@ -705,7 +727,7 @@ async function createGroup() {
   if (S.mode === 'demo') { DEMO.avail[id] = {}; DEMO.plans[id] = {}; DEMO.comments[id] = {}; }
   switchGroup(id); toast(t('{g} is ready. Copy the invite link and send it to your people.', { g: n }));
   await W(async () => {
-    await B.batch([['set', 'groups/' + id, g], ['set', 'invites/' + code, { gid: id, groupName: n, createdBy: S.me, createdAt: now }]]);
+    await B.batch([['set', 'groups/' + id, g], ['set', 'invites/' + code, { gid: id, groupName: n, emoji: g.emoji, createdBy: S.me, createdAt: now }]]);
     await B.set(`groups/${id}/avail/${S.me}`, { days: S.profile?.mainDays || {}, updatedAt: now });
   });
 }
@@ -713,7 +735,7 @@ async function resetInvite() {
   const g = G(), old = g.inviteCode, code = randCode();
   if (S.mode === 'demo') { toast(t('New link ready. The old one no longer works.')); return; }
   setGroupLocal({ inviteCode: code }); renderSheet();
-  await W(() => B.batch([['set', 'invites/' + code, { gid: S.gid, groupName: g.name, createdBy: S.me, createdAt: Date.now() }], ['update', 'groups/' + S.gid, { inviteCode: code }], ...(old ? [['delete', 'invites/' + old]] : [])]));
+  await W(() => B.batch([['set', 'invites/' + code, { gid: S.gid, groupName: g.name, emoji: g.emoji || '', createdBy: S.me, createdAt: Date.now() }], ['update', 'groups/' + S.gid, { inviteCode: code }], ...(old ? [['delete', 'invites/' + old]] : [])]));
   toast(t('New link ready. The old one no longer works.'));
 }
 
@@ -782,6 +804,8 @@ export function startLive(user, exit) {
   stop(); onExit = exit || onExit; setToday();
   Object.assign(S, { mode: 'live', me: user.uid, user, profile: null, groups: {}, gAvail: {}, plans: {}, comments: {}, gotProfile: false, gotGroups: false });
   try { const c = localStorage.getItem('wwm.invite'); if (c && !S.pendingInvite) S.pendingInvite = c; } catch (e) {}
+  S.inviteQueue = user.isAnonymous ? [] : B.takeGuestCodes(); // switched from a guest session to an existing account: re-join those groups
+  if (S.pendingInvite) loadInviteInfo(S.pendingInvite);
   const uid = user.uid;
   subs.push(B.listenDoc('users/' + uid, (p) => {
     if (!p) {

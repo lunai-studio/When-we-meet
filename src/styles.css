@@ -36,7 +36,6 @@
   --mono:"JetBrains Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
   --r-sm:8px; --r-md:14px; --r-lg:20px;
 }
-html,body{transition:background-color .35s,color .35s}
 html,body{background:var(--bg);color:var(--ink);overflow-x:clip}
 body{font-family:var(--sans);font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased}
 body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:30;background:var(--bg)}
@@ -480,3 +479,9 @@ a.btn.primary{color:var(--bg)} a.btn.go{color:var(--on-decision)}
 .tpick summary::-webkit-details-marker{display:none}
 .tpick-menu{position:absolute;right:0;top:calc(100% + 8px);background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:6px;display:grid;gap:4px;width:190px;box-shadow:0 18px 40px var(--shadow);z-index:30}
 @media (max-width:420px){.lnav .btn.sm{padding:6px 10px}.lnav .seg.lang button{padding:5px 7px}}
+
+/* ---------- guests ---------- */
+.invite-hero{display:flex;align-items:center;gap:14px;padding:14px;border-radius:14px;background:linear-gradient(135deg,color-mix(in srgb,var(--flow1) 18%,var(--surface2)),var(--surface2));border:1px solid var(--line)}
+.invite-emo{font-size:36px;line-height:1}
+.banner.guest{border-color:color-mix(in srgb,var(--maybe) 45%,transparent)}
+.banner.guest .tag{color:var(--maybe)}

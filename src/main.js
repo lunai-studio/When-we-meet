@@ -25,7 +25,13 @@ function route() {
   if (r === 'join' && arg) {
     try { localStorage.setItem('wwm.invite', arg); } catch (e) {}
     if (user) { App.setPendingInvite(arg); location.replace('#/app'); return; }
-    if (user === null) { location.replace('#/login'); return; }
+    if (user === null) {
+      if (!B.hasBackend) { location.replace('#/login'); return; }
+      // Secret-Santa style: no account needed to accept an invite. A guest session is created and kept on this device.
+      show('public'); view = 'wait'; pub.innerHTML = `<div class="lwrap login"><div class="empty">${t('Opening your invite…')}</div></div>`;
+      B.signInGuest().catch((err) => { console.error(err); location.replace('#/login'); });
+      return;
+    }
   }
   if (r === 'demo') {
     if (view !== 'demo') { stopLanding(); show('shell'); view = 'demo'; App.startDemo(() => { location.hash = '#/'; }); }
@@ -39,10 +45,10 @@ function route() {
   }
   if (view === 'app' || view === 'demo') App.stop();
   if (r === 'login') {
-    if (user) { location.replace('#/app'); return; }
+    if (user && !user.isAnonymous) { location.replace('#/app'); return; }
     show('public'); view = 'login';
     let invited = false; try { invited = !!localStorage.getItem('wwm.invite'); } catch (e) {}
-    renderLogin(pub, { hasBackend: B.hasBackend, invited, ...login });
+    renderLogin(pub, { hasBackend: B.hasBackend, invited, guest: !!user?.isAnonymous, ...login });
     return;
   }
   show('public'); view = 'landing'; renderLanding(pub, { signedIn: !!user }); scrollTo(0, 0);
@@ -63,7 +69,7 @@ pub.addEventListener('click', async (e) => {
   if (a === 'resend') { login.sent = null; route(); return; }
   if (a === 'google') {
     login.error = null;
-    try { await B.signInGoogle(); } catch (err) { if (err?.code !== 'auth/popup-closed-by-user' && err?.code !== 'auth/cancelled-popup-request') { login.error = t('Sign-in failed. Try again.'); console.error(err); route(); } }
+    try { await B.signInGoogle(); location.hash = '#/app'; } catch (err) { if (err?.code !== 'auth/popup-closed-by-user' && err?.code !== 'auth/cancelled-popup-request') { login.error = t('Sign-in failed. Try again.'); console.error(err); route(); } }
     return;
   }
   if (a === 'magic') {
@@ -88,7 +94,7 @@ window.addEventListener('hashchange', route);
     const prev = user; user = u || null;
     if (user && view === 'login') { location.hash = '#/app'; return; }
     if (!user && view === 'app') { App.stop(); view = null; }
-    if (prev === undefined || view === 'wait' || view === 'landing' || !user) route();
+    if (prev === undefined || view === 'wait' || view === 'landing' || !user || (prev && user && prev.uid !== user.uid)) { if (view === 'app' && prev && user && prev.uid !== user.uid) view = null; route(); }
   });
   route();
 })();

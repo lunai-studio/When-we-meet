@@ -14,6 +14,8 @@ For couples, friend groups and clubs. English and Spanish.
 | `#/join/<code>` | Invite link. Signs you in if needed, then adds you to the group |
 | `#/demo` | The full app with sample data. Nothing is saved |
 
+**Invites work like Secret Santa.** Opening an invite link needs no account: you type your name, pick an emoji and you're in. Behind the scenes it's a Firebase anonymous session that stays on that device, so the next invite (or the next visit) goes straight in. "Save your account" links Google or an email to the *same* user, keeping every group, day and answer, and lets you use it on other devices. Creating a group requires a saved account, so organizers never lose their group. If a guest picks a Google account that already exists, they switch to it and their guest groups are re-joined automatically.
+
 **Privacy.** Groups are invite-only. Nobody can list or browse groups. You join by opening an invite link, and only members can read a group, its plans, comments and availability. All of this is enforced in `firestore.rules` and covered by `tests/rules.test.mjs`. The group creator can reset the link or remove members.
 
 **Many groups, one person.** You can be in as many groups as you like (partner, friends, club). Your days are marked once in a main calendar and every group sees them, or you give one group its own calendar. Group chips at the top of the home screen switch between groups.
@@ -55,7 +57,7 @@ npm run dev            # without Firebase config the login page offers the demo
 ### Connect Firebase (about 10 minutes)
 
 1. Create a project at https://console.firebase.google.com.
-2. **Authentication → Sign-in method**: enable **Google** and **Email/Password → Email link (passwordless sign-in)**.
+2. **Authentication → Sign-in method**: enable **Google**, **Email/Password → Email link (passwordless sign-in)** and **Anonymous** (for guests who open an invite link).
 3. **Authentication → Settings → Authorized domains**: add your production domain.
 4. **Firestore Database**: create it in production mode (an EU region like `europe-west3` if your users are in Europe).
 5. **Project settings → Your apps → Web app**: copy the config into `.env.local` (see `.env.example`).
@@ -71,4 +73,12 @@ npm run deploy                  # builds, then deploys hosting + firestore rules
 
 ```bash
 npm run test:rules              # starts the Firestore emulator (needs Java) and runs the tests
+```
+
+### End-to-end guest flow
+
+```bash
+npx firebase emulators:start --only firestore,auth --project demo-wwm
+VITE_USE_EMULATORS=1 VITE_FIREBASE_API_KEY=fake VITE_FIREBASE_PROJECT_ID=demo-wwm npx vite --port 5174
+npm run test:e2e                # invite → join as guest → remembered → 2nd invite → save account (same user)
 ```
