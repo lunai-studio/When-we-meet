@@ -8,7 +8,7 @@ import './styles.css';
 import { t, setLang, LANG } from './i18n.js';
 import * as B from './backend.js';
 import * as App from './app.js';
-import { renderLanding, renderLogin, stopLanding } from './landing.js';
+import { renderLanding, renderLogin, stopLanding, landingAction } from './landing.js';
 
 const pub = document.getElementById('public');
 const shell = document.getElementById('shell');
@@ -58,6 +58,7 @@ async function exitApp() {
 pub.addEventListener('click', async (e) => {
   const el = e.target.closest('[data-l]'); if (!el) return;
   const a = el.dataset.l;
+  if (landingAction(a, el)) return;
   if (a === 'lang') { setLang(el.dataset.v); view = null; route(); return; }
   if (a === 'resend') { login.sent = null; route(); return; }
   if (a === 'google') {

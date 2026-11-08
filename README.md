@@ -8,13 +8,21 @@ For couples, friend groups and clubs. English and Spanish.
 
 | Route | What it is |
 |---|---|
-| `#/` | Home page: animated walkthrough, how it works, use cases (couples, friends, clubs), privacy |
+| `#/` | Home page: a video-style walkthrough (6 scenes, play/pause, jump to any scene), how it works, many groups, Google Maps, use cases (couples, friends, clubs), themes, privacy |
 | `#/login` | Sign in with Google or an email link (no passwords) |
 | `#/app` | Your groups: home, calendar, plans |
 | `#/join/<code>` | Invite link. Signs you in if needed, then adds you to the group |
 | `#/demo` | The full app with sample data. Nothing is saved |
 
 **Privacy.** Groups are invite-only. Nobody can list or browse groups. You join by opening an invite link, and only members can read a group, its plans, comments and availability. All of this is enforced in `firestore.rules` and covered by `tests/rules.test.mjs`. The group creator can reset the link or remove members.
+
+**Many groups, one person.** You can be in as many groups as you like (partner, friends, club). Your days are marked once in a main calendar and every group sees them, or you give one group its own calendar. Group chips at the top of the home screen switch between groups.
+
+**People are emoji + color.** Everyone picks an emoji and a color. They show up the same way everywhere: avatars, plan answers, and the "Everyone" calendar, where each bar is one person in their color.
+
+**Google Maps.** A plan's place can be a name or any Google Maps link. The plan shows an embedded map (no API key needed) and buttons for "Open in Google Maps" and "Directions".
+
+**Themes.** Midnight (dark violet), Blossom (soft pink, light), Slate (charcoal + steel + amber) and Paper (light, minimal). You pick one in your profile or on the home page, and it's saved to your account.
 
 **Plans at a specific time.** Each date option has a start time and an optional end time, or "all day". Once a plan is fixed you can add it to Google Calendar or download an `.ics` file for Apple Calendar or Outlook. Saying "I'm in" marks you as busy for that time slot.
 

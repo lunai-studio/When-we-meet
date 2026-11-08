@@ -5,6 +5,7 @@
    - plans happen at a specific time (or all day), with "add to calendar" */
 import { t, LANG, setLang, cap } from './i18n.js';
 import * as B from './backend.js';
+import { THEMES, THEME, setTheme, themeName, swatchHTML } from './theme.js';
 
 /* ---------- helpers ---------- */
 const $ = (s) => document.querySelector(s);
@@ -29,6 +30,9 @@ const TYPES = ['Dinner', 'Drinks', 'Party', 'Trip', 'Gym', 'Movie', 'Coffee', 'D
 const PALETTE = ['#C084FC', '#3DDC97', '#F2C14E', '#60A5FA', '#F472B6', '#FB923C', '#A3E635', '#22D3EE', '#E879F9', '#FCA5A5'];
 const hash = (s) => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) | 0; return Math.abs(h); };
 const colorOf = (id) => PALETTE[hash(id) % PALETTE.length];
+export const EMOJIS = ['🦊', '🐼', '🐙', '🦄', '🐸', '🐯', '🐨', '🦉', '🐝', '🐻', '🐶', '🐱', '🌵', '🌻', '🍉', '🍕', '🚀', '⚡', '🎸', '🌙', '🔥', '🍀', '🎨', '🙋'];
+const GROUP_EMOJIS = ['🍻', '💑', '📚', '🏃', '🎲', '🍽️', '⚽', '🎉', '👨‍👩‍👧', '💼', '🎸', '🧘'];
+const defEmoji = (id) => EMOJIS[hash(id + 'e') % (EMOJIS.length - 1)];
 const initials = (n) => (n || '?').trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase();
 function norm(e) { if (!e) return null; return e.s === 'free' || e.s === 'away' || e.s === 'busy' ? e : null; }
 const markedCount = (days, prefix) => Object.entries(days || {}).filter(([k, e]) => k >= TK && (!prefix || k.startsWith(prefix)) && norm(e)).length;
@@ -76,13 +80,20 @@ const memberIds = (g = G()) => (g ? Object.keys(g.members || {}).sort((a, b) => 
 const myName = () => S.profile?.name || '';
 const rawName = (id) => (id === S.me ? myName() : G()?.members?.[id]?.name || '');
 const nameOf = (id) => (id === S.me ? t('You') : rawName(id) || t('Someone'));
+/* every person = an emoji on their own color, the same in every view */
+function person(id, g = G()) {
+  const m = id === S.me ? { name: myName(), emoji: S.profile?.emoji, color: S.profile?.color } : g?.members?.[id] || {};
+  return { name: m.name || '', emoji: m.emoji || defEmoji(id), color: m.color || colorOf(id) };
+}
+const gEmoji = (g) => (g?.emoji ? g.emoji + ' ' : '');
 const modeOf = (id, g = G()) => (g?.members?.[id]?.availMode === 'own' ? 'own' : 'main');
 const daysOf = (id) => (id === S.me && modeOf(id) === 'main' ? S.profile?.mainDays || {} : S.gAvail[id]?.days || {});
 const myDays = () => (S.me ? daysOf(S.me) : {});
 const mainUsers = (id) => myGroups().filter(([, g]) => modeOf(id, g) === 'main').length;
 const isGroupOwner = () => G()?.createdBy === S.me;
 const need = () => { const g = G(), n = memberIds().length; return Math.max(2, Math.min(g?.minPeople || 3, n || 2)); };
-function faceHTML(id) { const n = rawName(id); return `<span class="avatar" style="background:${colorOf(id)}" title="${esc(n)}">${esc(initials(n))}</span>`; }
+function faceHTML(id, g) { const p = person(id, g); return `<span class="avatar emo" style="background:${p.color}" title="${esc(p.name)}">${p.emoji}</span>`; }
+const chipHTML = (id) => `<span class="pchip" style="--pc:${person(id).color}">${faceHTML(id)}${esc(nameOf(id))}</span>`;
 const commentsFor = (pid) => Object.entries(S.comments).map(([id, c]) => ({ id, ...c })).filter((c) => c.planId === pid).sort((a, b) => a.at - b.at);
 const live = () => S.mode === 'live';
 const gp = (p) => `groups/${S.gid}/${p}`;
@@ -211,12 +222,13 @@ export function render() {
   $('#fab').hidden = !(inG && S.tab === 'plans' && editable()); $('#fab').textContent = t('+ New plan');
   app.style.paddingBottom = showBrush ? '230px' : '';
   if (S.sheet) renderSheet();
+  const on = app.querySelector('.gchip.on'); if (on) { const row = on.parentElement; row.scrollLeft = on.offsetLeft - row.offsetLeft - 8; }
 }
 function header(inG) {
   const g = G();
   return `<div class="top">
     <button class="grpbtn" data-act="groups" ${!ready() ? 'disabled' : ''}><span class="mono muted">WhenWeMeet</span>
-      <span class="grpname"><h1>${esc(inG ? g.name : t('Your groups'))}</h1>${ready() ? '<span class="chev"></span>' : ''}</span><span class="flow"></span></button>
+      <span class="grpname"><h1>${inG ? gEmoji(g) + esc(g.name) : t('Your groups')}</h1>${ready() ? '<span class="chev"></span>' : ''}</span><span class="flow"></span></button>
     <div class="row" style="flex-wrap:nowrap">
       <div class="seg lang" role="group" aria-label="Language"><button data-act="lang" data-v="en" aria-pressed="${LANG === 'en'}">EN</button><button data-act="lang" data-v="es" aria-pressed="${LANG === 'es'}">ES</button></div>
       ${S.me && (myName() || S.mode === 'demo') ? `<button class="iconbtn" data-act="profile" aria-label="${esc(t('Your profile'))}">${faceHTML(S.me)}<span class="nm-short">${esc(myName())}</span></button>` : ''}
@@ -236,20 +248,24 @@ function groupsView(page) {
   const mine = myGroups(), can = editable();
   let h = page ? `<div class="sec-h" style="margin-top:4px"><h2>${t('Your groups')}</h2></div>` : `<h2>${t('Your groups')}</h2>`;
   h += mine.length ? `<div class="stack" style="gap:8px">${mine.map(([id, g]) => `<button class="plan grp ${id === S.gid ? 'confirmed' : ''}" data-act="switchGroup" data-v="${id}">
-      <div class="plan-row" style="align-items:center"><h3>${esc(g.name)}</h3>${id === S.gid ? `<span class="chip on">${t('Open')}</span>` : ''}</div>
-      <div class="plan-row" style="align-items:center"><div class="faces">${memberIds(g).slice(0, 8).map((m) => `<span class="avatar" style="background:${colorOf(m)}">${esc(initials(m === S.me ? myName() : g.members[m]?.name))}</span>`).join('')}</div>
+      <div class="plan-row" style="align-items:center"><h3>${gEmoji(g)}${esc(g.name)}</h3>${id === S.gid ? `<span class="chip on">${t('Open')}</span>` : ''}</div>
+      <div class="plan-row" style="align-items:center"><div class="faces">${memberIds(g).slice(0, 8).map((m) => faceHTML(m, g)).join('')}</div>
       <span class="meta">${t('{n} people', { n: memberIds(g).length })} · ${modeOf(S.me, g) === 'own' ? t('Own calendar') : t('Main calendar')}</span></div></button>`).join('')}</div>`
     : `<div class="empty">${t("You're not in any group yet.")}</div>`;
   if (can) {
     h += `<div class="sec-h"><h2>${t('Create a group')}</h2></div><div class="card stack" style="gap:10px">
       <div class="field"><label for="newGroup">${t('Group name')}</label><input class="input" id="newGroup" maxlength="40" placeholder="${esc(t('e.g. Dinner crew, Book club, Us two'))}"></div>
+      <div class="field"><span class="lbl">${t('Icon')}</span><div class="row emorow">${GROUP_EMOJIS.map((e) => `<button class="emo-btn" data-act="newGEmoji" data-v="${e}" aria-pressed="${(S.newGEmoji || '🍻') === e}">${e}</button>`).join('')}</div></div>
       <button class="btn primary full" data-act="createGroup">${t('Create group')}</button>
-      <p class="meta" style="margin:0">${t('Groups are private. Only people you send the invite link to can join and see it.')}</p></div>`;
+      <p class="meta" style="margin:0">${t('Groups are private. Only people you send the invite link to can join and see it.')} ${t('You can be in as many groups as you like: your partner, your friends, your club.')}</p></div>`;
     h += `<div class="sec-h"><h2>${t('Got an invite?')}</h2></div><div class="card stack" style="gap:10px">
       <div class="field"><label for="inviteIn">${t('Invite link')}</label><input class="input" id="inviteIn" placeholder="https://…/#/join/…" autocomplete="off"></div>
       <button class="btn full" data-act="joinLink">${t('Join group')}</button></div>`;
   }
   return h;
+}
+function groupChips() {
+  return `<div class="gchips" aria-label="${esc(t('Your groups'))}">${myGroups().map(([id, g]) => `<button class="gchip ${id === S.gid ? 'on' : ''}" data-act="switchGroup" data-v="${id}">${gEmoji(g)}${esc(g.name)}</button>`).join('')}<button class="gchip add" data-act="groups">+ ${t('New group')}</button></div>`;
 }
 function inviteCard() {
   const g = G();
@@ -267,7 +283,7 @@ function homeView() {
   const toAnswer = plans.filter(needsMe), upcoming = plans.filter((p) => p.status === 'confirmed').slice(0, 3);
   const myCount = markedCount(myDays()), ids = memberIds(), notMarked = ids.filter((id) => !markedCount(daysOf(id))), goalDone = gs.done >= gs.count;
   const perTxt = gs.per === 'week' ? t('week') : t('month');
-  let h = `<div class="card goal"><div class="goal-top"><div><span class="mono muted">${t('Goal')} · ${gs.count}× ${t('per')} ${perTxt}</span>
+  let h = groupChips() + `<div class="card goal"><div class="goal-top"><div><span class="mono muted">${t('Goal')} · ${gs.count}× ${t('per')} ${perTxt}</span>
     <h3 style="margin-top:6px">${goalDone ? `${t('Done {label}.', { label: esc(gs.label) })} <span class="done">${t('See you there.')}</span>` : t('{d} of {c} meetups planned {label}', { d: gs.done, c: gs.count, label: esc(gs.label) })}</h3></div>
     <button class="link" data-act="gsettings">${t('Edit')}</button></div>
     <div class="pips">${Array.from({ length: gs.count }, (_, i) => `<span class="pip ${i < gs.done ? 'on' : ''}"></span>`).join('')}</div>
@@ -296,7 +312,7 @@ function planCard(p) {
   const tag = isNew(p.createdAt, p.createdBy) ? `<span class="chip on">${t('New')}</span>` : p.status === 'confirmed' ? `<span class="chip on">${t("It's on")}</span>` : needsMe(p) ? `<span class="chip need">${multi ? t('Vote') : t('Answer')}</span>` : `<span class="chip">${multi ? t('Voting') : t('Proposed')}</span>`;
   return `<button class="plan ${p.status === 'confirmed' ? 'confirmed' : ''}" data-act="openPlan" data-id="${p.id}">
     <div class="plan-row"><div style="min-width:0"><span class="mono muted">${esc(t(p.type || 'Other'))}</span><h3 style="margin-top:3px">${esc(p.title || t(p.type))}</h3></div>${tag}</div>
-    <div class="meta">${esc(planWhen(p))}${p.place ? ` · ${esc(placeText(p.place))}` : ''}</div>
+    <div class="meta">${esc(planWhen(p))}${p.place ? ` · 📍 ${esc(placeText(p.place))}` : ''}</div>
     <div class="plan-row" style="align-items:center"><div class="faces">${ids.slice(0, 8).map(faceHTML).join('')}</div>
     <span class="meta">${cm.length ? `${newC ? `<b style="color:var(--decision)">${t('{n} new', { n: newC })}</b> · ` : ''}${t('{n} comments', { n: cm.length })} · ` : ''}${multi ? t('{a}/{b} voted', { a: voted, b: ids.length }) : t('{a}/{b} going', { a: yes, b: ids.length })}</span></div></button>`;
 }
@@ -321,7 +337,7 @@ function calView() {
       ${mode === 'own' ? `<div class="row" style="flex-basis:100%"><button class="btn sm" data-act="syncAsk" data-v="toGroup">${t('Main → this group')}</button><button class="btn sm" data-act="syncAsk" data-v="toMain">${t('This group → main')}</button></div>` : ''}</div>`;
     h += `<div class="legend"><span><i style="background:var(--free)"></i>${t('Free')}</span><span><i style="background:var(--busy)"></i>${t('Busy')}</span><span><i style="background:var(--away)"></i>${t('Out of the city')}</span><span>${t('Blank = not marked')}</span></div>
       ${mine && markedCount(myDays()) ? `<button class="link danger" data-act="clearAll">${S.confirmClear ? t('Tap again to clear all your days') : t('Clear all my days')}</button>` : ''}`;
-  } else h += `<div class="legend"><span><i style="background:var(--free-bg);border:1px solid var(--free)"></i>${t('{n}+ free', { n: need() })}</span><span><i style="background:var(--decision);border-radius:50%"></i>${t('Plan on')}</span><span><i style="border:1.5px solid var(--lilac);border-radius:50%"></i>${t('Proposed')}</span><span>${t('Tap a day for details')}</span></div>`;
+  } else h += `<div class="plegend">${memberIds().slice(0, 6).map(chipHTML).join('')}</div><p class="hint" style="margin:0 0 4px">${t('Each bar in a day is one person, in this order. Their color = free, red = busy, blue = out of the city.')}</p><div class="legend"><span><i style="background:var(--free-bg);border:1px solid var(--free)"></i>${t('{n}+ free', { n: need() })}</span><span><i style="background:var(--decision);border-radius:50%"></i>${t('Plan on')}</span><span><i style="border:1.5px solid var(--lilac);border-radius:50%"></i>${t('Proposed')}</span><span>${t('Tap a day for details')}</span></div>`;
   const planMarks = {};
   for (const p of Object.values(S.plans)) for (const d of planDates(p)) { const on = p.status === 'confirmed'; if (!planMarks[d] || on) planMarks[d] = on ? 'on' : 'open'; }
   for (const m of monthsList()) {
@@ -336,7 +352,7 @@ function calView() {
         const k = `${mk}-${pad(d)}`, past = k < TK, we = wdIdx(dparse(k)) >= 5; let cls = `day ${we ? 'we' : ''} ${past ? 'past' : ''} ${k === TK ? 'today' : ''}`, inner = '';
         if (S.calView === 'mine') { const e = norm(myDays()[k]); if (e) { cls += ` s-${e.s}`; inner = `<span class="lab">${cellLabel(e)}</span>`; } }
         else { const p = dayPeople(k), ids = memberIds(); if (p.free.length >= need() && !past) cls += ' good';
-          inner = `${p.free.length ? `<span class="cnt">${p.free.length}/${ids.length}</span>` : ''}<span class="bars">${ids.slice(0, 6).map((id) => { const e = norm(daysOf(id)[k]); return `<span class="${e ? e.s[0] : ''}"></span>`; }).join('')}</span>`; }
+          inner = `${p.free.length ? `<span class="cnt">${p.free.length}/${ids.length}</span>` : ''}<span class="bars">${ids.slice(0, 6).map((id) => { const e = norm(daysOf(id)[k]); return `<span class="${e ? e.s[0] : ''}" ${e && e.s === 'free' ? `style="background:${person(id).color}"` : ''}></span>`; }).join('')}</span>`; }
         const pm = planMarks[k];
         h += `<button class="${cls}" data-act="day" data-k="${k}" aria-label="${esc(fmtDay(k))}"><span class="n">${d}</span>${inner}${pm ? `<span class="mark ${pm}"></span>` : ''}</button>`;
       }
@@ -361,7 +377,7 @@ function brushHTML() {
 
 /* ---------- sheets ---------- */
 function openSheet(kind, arg) { S.sheet = { kind, arg }; renderSheet(); $('#sheet').hidden = false; $('#scrim').hidden = false; }
-function closeSheet() { S.sheet = null; S.draft = null; S.gDraft = null; $('#sheet').hidden = true; $('#scrim').hidden = true; }
+function closeSheet() { S.sheet = null; S.draft = null; S.gDraft = null; S.pDraft = null; $('#sheet').hidden = true; $('#scrim').hidden = true; }
 function renderSheet() {
   const { kind, arg } = S.sheet; let h = '<div class="grab"></div>';
   h += kind === 'sync' ? syncSheet(arg) : kind === 'day' ? daySheet(arg) : kind === 'plan' ? planSheet(arg) : kind === 'form' ? formSheet() : kind === 'gsettings' ? gSettingsSheet() : kind === 'profile' ? profileSheet() : groupsView(false);
@@ -379,7 +395,7 @@ function planSheet(id) {
   if (!S.plans[id]) return `<h2>${t('This plan was deleted.')}</h2>`;
   const p = { id, ...S.plans[id] }, ids = invitedIds(p), multi = p.status !== 'confirmed' && p.options.length > 1, mine = p.createdBy === S.me, inv = isInvited(p), can = editable(), boss = mine || isGroupOwner();
   let h = `<div><span class="mono muted">${esc(t(p.type || 'Other'))} · ${t('by {n}', { n: esc(nameOf(p.createdBy)) })}</span><h2 style="margin-top:4px">${esc(p.title || t(p.type))}</h2>
-    <p class="meta" style="margin:6px 0 0">${esc(planWhen(p))}${p.place ? ` · ${esc(placeText(p.place))}` : ''}</p>${p.place ? `<p style="margin:8px 0 0">${mapsLink(p.place)}</p>` : ''}${p.note ? `<p style="margin:8px 0 0">${esc(p.note)}</p>` : ''}</div>`;
+    <p class="meta" style="margin:6px 0 0">${esc(planWhen(p))}${p.place ? ` · ${esc(placeText(p.place))}` : ''}</p>${p.place ? mapBlock(p.place) : ''}${p.note ? `<p style="margin:8px 0 0">${esc(p.note)}</p>` : ''}</div>`;
   if (multi) {
     const counts = p.options.map((_, i) => ids.filter((m) => (p.votes?.[m] || []).includes(i))), top = Math.max(...counts.map((c) => c.length)), myV = p.votes?.[S.me] || [];
     h += `<div class="field"><span class="lbl">${t('Which dates work for you? Pick all that do.')}</span><div class="stack" style="gap:8px">${p.options.map((o, i) => `<button class="vote ${top > 0 && counts[i].length === top ? 'win' : ''}" data-act="vote" data-id="${id}" data-i="${i}" aria-pressed="${myV.includes(i)}" ${can && inv ? '' : 'disabled'}>
@@ -419,7 +435,7 @@ function formSheet() {
     ${d.options.length > 1 ? `<button class="x" data-act="fDelOpt" data-i="${i}" aria-label="${esc(t('Remove date'))}">✕</button>` : ''}
     <div class="row opt-sub"><button class="pill sm" data-act="fAllDay" data-i="${i}" aria-pressed="${!!o.allDay}">${t('All day')}</button>${o.allDay ? '' : `<span class="hint">${t('Start')} · ${t('end (optional)')}</span>`}</div></div>`).join('')}
     ${d.options.length < 5 ? `<button class="btn" data-act="fAddOpt" style="align-self:flex-start">${t('+ Add another date to vote on')}</button>` : ''}</div></div>
-  <div class="field"><label for="fPlace">${t('Where (optional)')}</label><input class="input" id="fPlace" maxlength="400" value="${esc(d.place)}" placeholder="${esc(t('Restaurant name, address or Google Maps link'))}" autocomplete="off"><span class="hint" id="fPlaceLink">${d.place ? mapsLink(d.place) + ' · ' + t('check it finds the right place') : t('Type a place or paste a link from Google Maps. Everyone gets a button to open it.')}</span></div>
+  <div class="field"><label for="fPlace">📍 ${t('Where (optional)')}</label><input class="input" id="fPlace" maxlength="400" value="${esc(d.place)}" placeholder="${esc(t('Restaurant name, address or Google Maps link'))}" autocomplete="off"><span class="hint" id="fPlaceLink">${d.place ? mapsLink(d.place) + ' · ' + t('check it finds the right place') : t('Type a place or paste a link from Google Maps. Everyone gets a button to open it.')}</span><div id="fMap">${d.place ? mapFrame(d.place) : ''}</div></div>
   <div class="field"><label for="fNote">${t('Note (optional)')}</label><textarea class="input" id="fNote" maxlength="300" placeholder="${esc(t('Bring something, budget, dress code…'))}">${esc(d.note)}</textarea></div>
   <div class="field"><span class="lbl">${t("Who's invited · {n}", { n: d.invited.length || ids.length })}</span><div class="row">
     <button class="pill sm" data-act="fInvAll" aria-pressed="${!d.invited.length}">${t('Everyone')}</button>
@@ -427,12 +443,13 @@ function formSheet() {
   <button class="btn primary full" data-act="fSave">${d.id ? t('Save changes') : d.options.length > 1 ? t('Send to the group to vote') : t('Propose it')}</button>`;
 }
 function gSettingsSheet() {
-  const g = G(), d = S.gDraft || (S.gDraft = { name: g.name, goalCount: g.goalCount || 1, goalPer: g.goalPer || 'month', minPeople: g.minPeople || 3 }), can = editable(), mode = modeOf(S.me), owner = isGroupOwner();
+  const g = G(), d = S.gDraft || (S.gDraft = { name: g.name, emoji: g.emoji || '', goalCount: g.goalCount || 1, goalPer: g.goalPer || 'month', minPeople: g.minPeople || 3 }), can = editable(), mode = modeOf(S.me), owner = isGroupOwner();
   return `<h2>${t('Group settings')}</h2>
   <div class="field"><span class="lbl">${t('Invite link')}</span>${inviteRow()}
     <p class="hint" style="margin:0">${t('Anyone with this link can join {g} after signing in. Nobody else can see it.', { g: esc(g.name) })}</p>
     ${owner ? `<button class="link danger" data-act="resetInvite" style="align-self:flex-start">${S.confirmReset ? t('Tap again: the old link stops working') : t('Reset link')}</button>` : ''}</div>
   <div class="field"><label for="gName">${t('Group name')}</label><input class="input" id="gName" maxlength="40" value="${esc(d.name)}"></div>
+  <div class="field"><span class="lbl">${t('Icon')}</span><div class="row emorow">${GROUP_EMOJIS.map((e) => `<button class="emo-btn" data-act="gEmoji" data-v="${e}" aria-pressed="${d.emoji === e}">${e}</button>`).join('')}</div></div>
   <div class="field"><span class="lbl">${t('We want to meet at least')}</span><div class="row">
     ${[1, 2, 3, 4].map((n) => `<button class="pill sm" data-act="gCount" data-v="${n}" aria-pressed="${+d.goalCount === n}">${n}×</button>`).join('')}
     <span class="muted">${t('per')}</span>${['week', 'month'].map((p) => `<button class="pill sm" data-act="gPer" data-v="${p}" aria-pressed="${d.goalPer === p}">${t(p)}</button>`).join('')}</div></div>
@@ -459,9 +476,14 @@ function syncSheet(dir) {
     <p class="hint" style="margin:0">${t('You can undo right after.')}</p>`;
 }
 function profileSheet() {
+  const d = S.pDraft || (S.pDraft = { emoji: person(S.me).emoji, color: person(S.me).color });
   return `<h2>${t('Your profile')}</h2>
+  <div class="ppreview"><span class="avatar emo big" style="background:${d.color}">${d.emoji}</span><span class="meta">${t('This is how your friends see you in calendars and plans.')}</span></div>
   ${S.user?.email ? `<p class="meta" style="margin:0">${t('Signed in as {e}', { e: esc(S.user.email) })}</p>` : ''}
   <div class="field"><label for="pName">${t('Your name')}</label><input class="input" id="pName" maxlength="24" value="${esc(myName())}"></div>
+  <div class="field"><span class="lbl">${t('Your emoji')}</span><div class="row emorow">${EMOJIS.map((e) => `<button class="emo-btn" data-act="pEmoji" data-v="${e}" aria-pressed="${d.emoji === e}">${e}</button>`).join('')}</div></div>
+  <div class="field"><span class="lbl">${t('Your color')}</span><div class="row">${PALETTE.map((c) => `<button class="cdot" data-act="pColor" data-v="${c}" style="background:${c}" aria-pressed="${d.color === c}" aria-label="${c}"></button>`).join('')}</div></div>
+  <div class="field"><span class="lbl">${t('Theme')}</span><div class="themes">${THEMES.map((th) => `<button class="tbtn" data-act="theme" data-v="${th.id}" aria-pressed="${THEME === th.id}">${swatchHTML(th)}${themeName(th, LANG)}</button>`).join('')}</div></div>
   <div class="field"><span class="lbl">${t('Language')}</span><div class="seg" role="group"><button data-act="lang" data-v="en" aria-pressed="${LANG === 'en'}">English</button><button data-act="lang" data-v="es" aria-pressed="${LANG === 'es'}">Español</button></div></div>
   <p class="meta" style="margin:0">${t('Your main calendar is used in {n} of your {m} groups.', { n: mainUsers(S.me), m: myGroups().length })}</p>
   ${editable() ? `<button class="btn primary full" data-act="pSave">${t('Save')}</button>` : ''}
@@ -493,6 +515,19 @@ function markPlanBusy(pid, on) {
 const isUrl = (v) => /^https?:\/\//i.test((v || '').trim());
 const mapsUrl = (v) => { v = (v || '').trim(); if (!v) return ''; return isUrl(v) ? v : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(v)}`; };
 const placeText = (v) => (isUrl(v) ? t('Location on Google Maps') : v);
+function mapQuery(v) {
+  v = (v || '').trim(); if (!isUrl(v)) return v;
+  try { const u = new URL(v), q = u.searchParams.get('q') || u.searchParams.get('query') || u.searchParams.get('destination'); if (q) return q;
+    const pl = u.pathname.match(/\/place\/([^/]+)/); if (pl) return decodeURIComponent(pl[1].replace(/\+/g, ' '));
+    const at = u.pathname.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/); if (at) return at[1] + ',' + at[2]; } catch (e) {}
+  return ''; // short links (maps.app.goo.gl) can't be previewed, the button still opens them
+}
+const embedUrl = (v) => { const q = mapQuery(v); return q ? `https://maps.google.com/maps?q=${encodeURIComponent(q)}&z=15&output=embed` : ''; };
+const dirUrl = (v) => { const q = mapQuery(v); return q ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(q)}` : mapsUrl(v); };
+const mapFrame = (v) => { const e = embedUrl(v); return e ? `<iframe class="mapframe" src="${esc(e)}" loading="lazy" referrerpolicy="no-referrer-when-downgrade" title="${esc(t('Map'))}"></iframe>` : ''; };
+function mapBlock(v) {
+  return `<div class="mapbox">${mapFrame(v)}<div class="row"><a class="btn sm" href="${esc(mapsUrl(v))}" target="_blank" rel="noopener noreferrer">📍 ${t('Open in Google Maps')}</a><a class="btn sm" href="${esc(dirUrl(v))}" target="_blank" rel="noopener noreferrer">🧭 ${t('Directions')}</a></div></div>`;
+}
 const mapsLink = (v) => (v ? `<a class="maplink" href="${esc(mapsUrl(v))}" target="_blank" rel="noopener noreferrer">${t('Open in Google Maps')} ↗</a>` : '');
 const newDraft = (opts) => ({ type: 'Dinner', title: '', options: opts || [optFromSlot(TK, 'pm')], place: '', note: '', invited: [] });
 function readForm() { const d = S.draft; if (!d) return; const a = $('#fTitle'); if (a) d.title = a.value; const b = $('#fPlace'); if (b) d.place = b.value; const c = $('#fNote'); if (c) d.note = c.value; }
@@ -533,7 +568,7 @@ async function joinByCode(code) {
   if (!inv) { toast(t('This invite link is not valid anymore. Ask for a new one.')); render(); return; }
   if (S.groups[inv.gid]) { S.tab = 'home'; switchGroup(inv.gid); return; }
   try {
-    const me = { name: myName(), joinedAt: Date.now(), availMode: 'main' };
+    const me = { ...myLook(), joinedAt: Date.now(), availMode: 'main' };
     await B.update('groups/' + inv.gid, { memberIds: B.arrayUnion(S.me), ['members.' + S.me]: me, joinCode: code });
     await B.set(`groups/${inv.gid}/avail/${S.me}`, { days: S.profile?.mainDays || {}, updatedAt: Date.now() });
     S.preferGid = inv.gid; S.tab = 'home';
@@ -551,7 +586,7 @@ document.addEventListener('input', (e) => {
   const el = e.target;
   if (el.dataset.opt != null && S.draft) { S.draft.options[+el.dataset.opt][el.dataset.f] = el.value; }
   if (el.id === 'bFrom') S.brush.from = el.value; if (el.id === 'bTo') S.brush.to = el.value; if (el.id === 'gName' && S.gDraft) S.gDraft.name = el.value;
-  if (el.id === 'fPlace' && S.draft) { S.draft.place = el.value; const h = $('#fPlaceLink'); if (h) h.innerHTML = el.value.trim() ? mapsLink(el.value) + ' · ' + t('check it finds the right place') : t('Type a place or paste a link from Google Maps. Everyone gets a button to open it.'); }
+  if (el.id === 'fPlace' && S.draft) { S.draft.place = el.value; clearTimeout(S.mapT); S.mapT = setTimeout(() => { const m = $('#fMap'); if (m && S.draft) m.innerHTML = S.draft.place.trim() ? mapFrame(S.draft.place) : ''; }, 700); const h = $('#fPlaceLink'); if (h) h.innerHTML = el.value.trim() ? mapsLink(el.value) + ' · ' + t('check it finds the right place') : t('Type a place or paste a link from Google Maps. Everyone gets a button to open it.'); }
 });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && S.sheet) closeSheet(); });
 document.addEventListener('click', (e) => {
@@ -635,11 +670,16 @@ document.addEventListener('click', (e) => {
     case 'gCount': S.gDraft.goalCount = +v; renderSheet(); break;
     case 'gPer': S.gDraft.goalPer = v; renderSheet(); break;
     case 'gMin': S.gDraft.minPeople = +v; renderSheet(); break;
-    case 'gSave': { const d = S.gDraft, patch = { name: (d.name || '').trim() || G().name, goalCount: d.goalCount, goalPer: d.goalPer, minPeople: d.minPeople };
+    case 'gSave': { const d = S.gDraft, patch = { name: (d.name || '').trim() || G().name, emoji: d.emoji || '', goalCount: d.goalCount, goalPer: d.goalPer, minPeople: d.minPeople };
       setGroupLocal(patch); W(() => B.update('groups/' + S.gid, patch)); closeSheet(); toast(t('Saved')); render(); break; }
     case 'profile': openSheet('profile'); break;
-    case 'pSave': { const n = $('#pName').value.trim(); if (n && n !== myName()) saveName(n); closeSheet(); toast(t('Saved')); render(); break; }
-    case 'join': { const n = $('#joinName').value.trim(); if (!n) { toast(t('Add a name first.')); $('#joinName').focus(); break; } saveName(n); render(); maybeJoin(); break; }
+    case 'pSave': { const n = $('#pName').value.trim() || myName(); saveLook({ name: n, emoji: S.pDraft.emoji, color: S.pDraft.color }); S.pDraft = null; closeSheet(); toast(t('Saved')); render(); break; }
+    case 'pEmoji': S.pDraft.emoji = v; S.pDraft.name = $('#pName').value; renderSheet(); $('#pName').value = S.pDraft.name; break;
+    case 'pColor': S.pDraft.color = v; S.pDraft.name = $('#pName').value; renderSheet(); $('#pName').value = S.pDraft.name; break;
+    case 'theme': setTheme(v); if (live() && S.profile) W(() => B.update('users/' + S.me, { theme: v })); if (S.sheet) { const nm = $('#pName')?.value; renderSheet(); if (nm != null && $('#pName')) $('#pName').value = nm; } break;
+    case 'newGEmoji': { S.newGEmoji = v; const nm = $('#newGroup')?.value; render(); if (S.sheet) renderSheet(); if ($('#newGroup')) $('#newGroup').value = nm || ''; break; }
+    case 'gEmoji': S.gDraft.emoji = v; renderSheet(); break;
+    case 'join': { const n = $('#joinName').value.trim(); if (!n) { toast(t('Add a name first.')); $('#joinName').focus(); break; } saveLook({ name: n }); render(); maybeJoin(); break; }
     case 'signOut': closeSheet(); onExit(); break;
     case 'closeSheet': closeSheet(); break;
   }
@@ -648,15 +688,19 @@ function copyText(txt, ok) {
   const fb = () => { const b = $('#copyBox') || $('#inviteBox'); if (b) { b.hidden = false; b.value = txt; b.select(); } toast(t('Select the text and copy it')); };
   if (navigator.clipboard?.writeText) navigator.clipboard.writeText(txt).then(() => toast(ok), fb); else fb();
 }
-function saveName(n) {
-  S.profile = { ...(S.profile || {}), name: n };
+const myLook = () => { const p = person(S.me); return { name: myName(), emoji: p.emoji, color: p.color }; };
+/* name, emoji and color live in your profile and are copied into each group you're in */
+function saveLook(patch) {
+  S.profile = { ...(S.profile || {}), ...patch };
+  if (S.mode === 'demo') { for (const [, g] of myGroups()) if (g.members[S.me]) Object.assign(g.members[S.me], patch); return; }
   if (!live()) return;
-  W(() => B.batch([['update', 'users/' + S.me, { name: n }], ...myGroups().map(([gid]) => ['update', 'groups/' + gid, { ['members.' + S.me + '.name']: n }])]));
+  const look = myLook(), gpatch = {}; for (const k of ['name', 'emoji', 'color']) gpatch['members.' + S.me + '.' + k] = look[k];
+  W(() => B.batch([['update', 'users/' + S.me, look], ...myGroups().map(([gid]) => ['update', 'groups/' + gid, gpatch])]));
 }
 async function createGroup() {
   const inp = $('#newGroup'), n = inp.value.trim(); if (!n) { toast(t('Give the group a name first.')); inp.focus(); return; }
   const now = Date.now(), code = randCode(), id = newId('groups');
-  const g = { name: n, goalCount: 1, goalPer: 'month', minPeople: 3, createdBy: S.me, createdAt: now, inviteCode: code, memberIds: [S.me], members: { [S.me]: { name: myName(), joinedAt: now, availMode: 'main' } } };
+  const g = { name: n, emoji: S.newGEmoji || '🍻', goalCount: 1, goalPer: 'month', minPeople: 3, createdBy: S.me, createdAt: now, inviteCode: code, memberIds: [S.me], members: { [S.me]: { ...myLook(), joinedAt: now, availMode: 'main' } } };
   S.groups[id] = g; S.preferGid = id; S.tab = 'home';
   if (S.mode === 'demo') { DEMO.avail[id] = {}; DEMO.plans[id] = {}; DEMO.comments[id] = {}; }
   switchGroup(id); toast(t('{g} is ready. Copy the invite link and send it to your people.', { g: n }));
@@ -741,13 +785,14 @@ export function startLive(user, exit) {
   const uid = user.uid;
   subs.push(B.listenDoc('users/' + uid, (p) => {
     if (!p) {
-      const first = { name: (user.displayName || '').split(' ')[0] || '', lang: LANG, mainDays: {}, createdAt: Date.now() };
+      const first = { name: (user.displayName || '').split(' ')[0] || '', emoji: defEmoji(uid), color: colorOf(uid), lang: LANG, theme: THEME, mainDays: {}, createdAt: Date.now() };
       S.profile = first; B.set('users/' + uid, first).catch(writeError);
     } else {
       const keep = busyKey('main') && S.profile?.mainDays;
       const pendingName = S.profile?.name && !p.name ? S.profile.name : null;
       S.profile = { ...p, mainDays: keep ? S.profile.mainDays : p.mainDays || {}, ...(pendingName ? { name: pendingName } : {}) };
       if (!S.gotProfile && p.lang && p.lang !== LANG) setLang(p.lang);
+      if (!S.gotProfile && p.theme && p.theme !== THEME) setTheme(p.theme);
     }
     S.gotProfile = true; maybeJoin(); render();
   }, (e) => { console.error(e); toast(t('Could not load your profile.')); }));
@@ -765,22 +810,23 @@ function closeSheetSafe() { if ($('#sheet')) closeSheet(); }
 const DEMO = { avail: {}, plans: {}, comments: {} };
 export function startDemo(exit) {
   stop(); onExit = exit || onExit; setToday();
-  Object.assign(S, { mode: 'demo', me: 'd1', user: null, groups: {}, gAvail: {}, plans: {}, comments: {}, tab: 'home', profile: { name: t('You'), mainDays: {} } });
+  Object.assign(S, { mode: 'demo', me: 'd1', user: null, groups: {}, gAvail: {}, plans: {}, comments: {}, tab: 'home', profile: { name: t('You'), emoji: '🙋', color: '#F2C14E', mainDays: {} } });
+  const LOOK = { d1: ['🙋', '#F2C14E'], d2: ['🦊', '#C084FC'], d3: ['🐼', '#3DDC97'], d4: ['🦄', '#F472B6'], d5: ['🐻', '#60A5FA'], d6: ['🦉', '#FB923C'], d7: ['🎸', '#22D3EE'] };
   const names = [['d1', t('You')], ['d2', 'Ana'], ['d3', 'Luis'], ['d4', 'Sofía'], ['d5', 'Tomáš'], ['d6', 'Marta'], ['d7', 'Jan']];
   let seed = 7; const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
   const daysFor = () => { const days = {}; for (let i = 0; i < 45; i++) { const d = new Date(TODAY); d.setDate(d.getDate() + i); const we = wdIdx(d) >= 5, r = rnd();
     if (r < (we ? 0.55 : 0.4)) days[dkey(d)] = { s: 'free', t: we ? 'all' : 'pm' }; else if (r < 0.5) days[dkey(d)] = { s: 'away', t: 'all' }; } return days; };
   const mainOf = {}; for (const [id] of names) if (id !== 'd1') mainOf[id] = daysFor();
-  const mem = (ids) => Object.fromEntries(ids.map((id, i) => [id, { name: names.find((n) => n[0] === id)[1], joinedAt: i, availMode: 'main' }]));
+  const mem = (ids) => Object.fromEntries(ids.map((id, i) => [id, { name: names.find((n) => n[0] === id)[1], emoji: LOOK[id][0], color: LOOK[id][1], joinedAt: i, availMode: 'main' }]));
   S.groups = {
-    g1: { name: t('Dinner crew (example)'), goalCount: 1, goalPer: 'month', minPeople: 3, createdBy: 'd1', createdAt: 1, members: mem(['d1', 'd2', 'd3', 'd4']) },
-    g2: { name: t('Us two (example)'), goalCount: 1, goalPer: 'week', minPeople: 2, createdBy: 'd1', createdAt: 2, members: mem(['d1', 'd5']) },
-    g3: { name: t('Book club (example)'), goalCount: 2, goalPer: 'month', minPeople: 3, createdBy: 'd6', createdAt: 3, members: mem(['d1', 'd2', 'd6', 'd7']) },
+    g1: { name: t('Dinner crew (example)'), emoji: '🍽️', goalCount: 1, goalPer: 'month', minPeople: 3, createdBy: 'd1', createdAt: 1, members: mem(['d1', 'd2', 'd3', 'd4']) },
+    g2: { name: t('Us two (example)'), emoji: '💑', goalCount: 1, goalPer: 'week', minPeople: 2, createdBy: 'd1', createdAt: 2, members: mem(['d1', 'd5']) },
+    g3: { name: t('Book club (example)'), emoji: '📚', goalCount: 2, goalPer: 'month', minPeople: 3, createdBy: 'd6', createdAt: 3, members: mem(['d1', 'd2', 'd6', 'd7']) },
   };
   for (const gid of Object.keys(S.groups)) { DEMO.avail[gid] = {}; for (const id of Object.keys(S.groups[gid].members)) if (id !== 'd1') DEMO.avail[gid][id] = { days: mainOf[id] }; DEMO.plans[gid] = {}; DEMO.comments[gid] = {}; }
   S.gid = 'g1'; S.gAvail = DEMO.avail.g1; S.plans = DEMO.plans.g1; S.comments = DEMO.comments.g1;
   const s = suggestions(3);
-  if (s.length) S.plans.demo1 = { title: 'Tacos at Las Adelitas', type: 'Dinner', options: [{ date: s[0].k, allDay: false, time: '19:30', end: '' }], invited: [], rsvp: { d2: 'yes', d3: 'maybe' }, votes: {}, status: 'open', chosen: 0, place: 'Vinohrady, Praha', note: '', createdBy: 'd2', createdAt: 1 };
+  if (s.length) S.plans.demo1 = { title: 'Tacos at Las Adelitas', type: 'Dinner', options: [{ date: s[0].k, allDay: false, time: '19:30', end: '' }], invited: [], rsvp: { d2: 'yes', d3: 'maybe' }, votes: {}, status: 'open', chosen: 0, place: 'Las Adelitas, Vinohrady, Praha', note: '', createdBy: 'd2', createdAt: 1 };
   if (s.length > 1) S.plans.demo2 = { title: 'Weekend in Český Krumlov', type: 'Trip', options: s.slice(0, 3).map((x) => ({ date: x.k, allDay: true, time: '', end: '' })), invited: [], votes: { d3: [0, 1], d4: [1] }, rsvp: {}, status: 'open', chosen: 0, place: '', note: '', createdBy: 'd3', createdAt: 2 };
   S.comments.c1 = { planId: 'demo1', by: 'd3', text: 'Can we book for 8? I finish work late.', at: 2 };
   render();
