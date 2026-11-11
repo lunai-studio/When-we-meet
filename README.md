@@ -22,7 +22,7 @@ If the Supabase variables are missing, or the URL has `?demo`, the app runs in *
 
 ```bash
 npm install
-npm run dev        # http://localhost:5173/when-we-meet/
+npm run dev        # http://localhost:5173/When-we-meet/
 ```
 
 ## Set up Supabase (once, ~10 minutes)
@@ -30,8 +30,8 @@ npm run dev        # http://localhost:5173/when-we-meet/
 1. Create a free project at supabase.com (region: Frankfurt is closest to Prague).
 2. **SQL Editor** → paste `supabase/schema.sql` → Run.
 3. **Authentication → URL Configuration**
-   - Site URL: `https://lunai-studio.github.io/when-we-meet/`
-   - Redirect URLs: add the same URL, plus `http://localhost:5173/when-we-meet/` for local work.
+   - Site URL: `https://lunai-studio.github.io/When-we-meet/`
+   - Redirect URLs: add the same URL, plus `http://localhost:5173/When-we-meet/` for local work.
 4. Email magic link works out of the box. Supabase's built-in mailer is rate-limited (a few emails per hour); for real use add your own SMTP under **Authentication → Emails** (Resend free tier works).
 5. *(Optional)* Google sign-in: **Authentication → Providers → Google**, paste a Google OAuth client ID/secret. Until then the Google button will show an error; email works.
 6. **Project Settings → API**: copy the Project URL and the `anon` public key.
@@ -46,7 +46,7 @@ The app works without this; people just won't get emails.
    supabase login
    supabase link --project-ref YOUR-PROJECT
    supabase secrets set RESEND_API_KEY=re_xxx FROM_EMAIL="WhenWeMeet <hola@yourdomain.com>" \
-     APP_URL=https://lunai-studio.github.io/when-we-meet/ CRON_SECRET=some-long-random-string
+     APP_URL=https://lunai-studio.github.io/When-we-meet/ CRON_SECRET=some-long-random-string
    supabase functions deploy notify
    supabase functions deploy digest
    ```
@@ -56,9 +56,9 @@ The app works without this; people just won't get emails.
 
 1. Repo **Settings → Pages** → Source: **GitHub Actions**.
 2. Repo **Settings → Secrets and variables → Actions → Variables**: add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (the anon key is public by design; RLS protects the data).
-3. Push to `main` (or run the workflow by hand). The site goes to `https://lunai-studio.github.io/when-we-meet/`.
+3. Push to `main` (or run the workflow by hand). The site goes to `https://lunai-studio.github.io/When-we-meet/`.
 
-Invite links look like `https://lunai-studio.github.io/when-we-meet/?join=<code>`; the code survives the sign-in redirect.
+Invite links look like `https://lunai-studio.github.io/When-we-meet/?join=<code>`; the code survives the sign-in redirect.
 
 ## Data model
 

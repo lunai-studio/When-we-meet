@@ -53,7 +53,7 @@ export async function send(to: string, subject: string, html: string) {
   if (!r.ok) throw new Error(`Resend ${r.status}: ${await r.text()}`);
 }
 
-export const appUrl = (fallback?: string) => Deno.env.get('APP_URL') ?? fallback ?? 'https://lunai-studio.github.io/when-we-meet/';
+export const appUrl = (fallback?: string) => Deno.env.get('APP_URL') ?? fallback ?? 'https://lunai-studio.github.io/When-we-meet/';
 
 const fmtDate = (d: string, lang: 'en' | 'es') =>
   new Date(d + 'T12:00:00Z').toLocaleDateString(lang === 'es' ? 'es-ES' : 'en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
