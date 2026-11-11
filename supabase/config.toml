@@ -1,0 +1,7 @@
+# Used by `supabase functions deploy`.
+[functions.notify]
+verify_jwt = true
+
+[functions.digest]
+# Called by pg_cron with x-cron-secret instead of a user token.
+verify_jwt = false

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from './api';
 import { dict } from './i18n';
-import type { CalMode, Calendar, DayMark, Group, Lang, Member, Profile } from './types';
-import { PALETTE } from './logic';
+import type { CalMode, Calendar, DayMark, Group, Lang, Member, Plan, Profile } from './types';
+import { PALETTE, needsMyAnswer } from './logic';
 import { Avatar, Sheet, Toast } from './ui';
 import { HomeTab } from './HomeTab';
 import { CalendarTab } from './CalendarTab';
+import { PlanForm, PlanSheet, PlansTab, type PlanDraft } from './Plans';
 
 type MyGroup = Group & { calendar_mode: CalMode };
 const ACTIVE_KEY = 'wwm.activeGroup';
@@ -74,6 +75,7 @@ export default function App() {
         await api.saveProfile(p);
       }}
       t={t}
+      setProfile={setProfile}
     />
   );
 }
@@ -165,14 +167,18 @@ function Onboard({ lang, onDone }: { lang: Lang; onDone: (name: string, color: s
   );
 }
 
-function Main({ profile, lang, setLang, t }: { profile: Profile; lang: Lang; setLang: (l: Lang) => void; t: (typeof dict)['en'] }) {
+function Main({ profile, lang, setLang, t, setProfile }: { profile: Profile; lang: Lang; setLang: (l: Lang) => void; t: (typeof dict)['en']; setProfile: (p: Profile) => void }) {
   const me = profile.id;
   const [groups, setGroups] = useState<MyGroup[] | null>(null);
   const [activeId, setActiveId] = useState<string | null>(localStorage.getItem(ACTIVE_KEY));
   const [members, setMembers] = useState<Member[]>([]);
   const [avail, setAvail] = useState<Record<string, Calendar>>({});
   const [mine, setMine] = useState<Calendar>({});
-  const [tab, setTab] = useState<'home' | 'calendar'>('home');
+  const [tab, setTab] = useState<'home' | 'calendar' | 'plans'>('home');
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [openPlan, setOpenPlan] = useState<string | null>(null);
+  const [form, setForm] = useState<null | { plan?: Plan; draft?: PlanDraft }>(null);
+  const [seenAt, setSeenAt] = useState('9999');
   const [sheet, setSheet] = useState<null | 'groups' | 'settings' | 'account'>(null);
   const [toast, setToast] = useState<null | { msg: string; undo?: () => void }>(null);
   const toastTimer = useRef<number>();
@@ -205,10 +211,11 @@ function Main({ profile, lang, setLang, t }: { profile: Profile; lang: Lang; set
 
   const loadGroupData = useCallback(async (g: MyGroup) => {
     const mem = await api.members(g.id);
-    const [a, m] = await Promise.all([api.groupAvailability(g.id, mem), api.myCalendar(g.calendar_mode === 'own' ? g.id : null)]);
+    const [a, m, pl] = await Promise.all([api.groupAvailability(g.id, mem), api.myCalendar(g.calendar_mode === 'own' ? g.id : null), api.plans(g.id)]);
     setMembers(mem);
     setAvail(a);
     setMine(m);
+    setPlans(pl);
   }, []);
 
   useEffect(() => {
@@ -220,6 +227,23 @@ function Main({ profile, lang, setLang, t }: { profile: Profile; lang: Lang; set
     if (group) loadGroupData(group).catch(fail);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [group?.id, group?.calendar_mode, loadGroupData]);
+
+  // Live updates from other members.
+  useEffect(() => {
+    if (!group) return;
+    return api.watchGroup(group.id, () => loadGroupData(group).catch(() => {}));
+  }, [group, loadGroupData]);
+
+  // "New" badges: plans and comments since the last visit to the Plans tab (per device).
+  const seenKey = group ? 'wwm.seen.' + group.id : '';
+  useEffect(() => {
+    if (!group) return;
+    if (tab === 'plans') {
+      setSeenAt(localStorage.getItem(seenKey) ?? '0');
+      localStorage.setItem(seenKey, new Date().toISOString());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, group?.id]);
 
   // Refresh when coming back to the app.
   useEffect(() => {
@@ -250,6 +274,7 @@ function Main({ profile, lang, setLang, t }: { profile: Profile; lang: Lang; set
   );
 
   const calId = group?.calendar_mode === 'own' ? group.id : null;
+  const waitingCount = plans.filter((x) => needsMyAnswer(x, me)).length;
 
   const setDays = (changes: Record<string, DayMark | null>, msg: string) => {
     const prev: Record<string, DayMark | null> = Object.fromEntries(Object.keys(changes).map((d) => [d, mine[d] ?? null]));
@@ -299,7 +324,20 @@ function Main({ profile, lang, setLang, t }: { profile: Profile; lang: Lang; set
           fail={fail}
         />
       ) : tab === 'home' ? (
-        <HomeTab t={t} lang={lang} group={group} members={members} avail={avail} onEdit={() => setSheet('settings')} />
+        <HomeTab
+          t={t}
+          lang={lang}
+          group={group}
+          members={members}
+          avail={avail}
+          plans={plans}
+          me={me}
+          onEdit={() => setSheet('settings')}
+          onDraft={(draft) => setForm({ draft })}
+          onGoPlans={() => setTab('plans')}
+        />
+      ) : tab === 'plans' ? (
+        <PlansTab t={t} lang={lang} me={me} plans={plans} members={members} seenAt={seenAt} onNew={() => setForm({})} onOpen={setOpenPlan} />
       ) : (
         <CalendarTab
           t={t}
@@ -353,11 +391,54 @@ function Main({ profile, lang, setLang, t }: { profile: Profile; lang: Lang; set
             <button className={tab === 'calendar' ? 'on' : ''} onClick={() => setTab('calendar')}>
               {t.calendar}
             </button>
+            <button className={tab === 'plans' ? 'on' : ''} onClick={() => setTab('plans')}>
+              {t.plans}
+              {waitingCount > 0 && <span className="tab-badge">{waitingCount}</span>}
+            </button>
           </div>
         </nav>
       )}
 
       {toast && <Toast msg={toast.msg} onUndo={toast.undo} undoLabel={t.undo} />}
+
+      {openPlan && group && plans.find((x) => x.id === openPlan) && (
+        <PlanSheet
+          t={t}
+          lang={lang}
+          me={me}
+          plan={plans.find((x) => x.id === openPlan)!}
+          members={members}
+          onClose={() => setOpenPlan(null)}
+          onEdit={() => {
+            setForm({ plan: plans.find((x) => x.id === openPlan) });
+            setOpenPlan(null);
+          }}
+          onChanged={() => loadGroupData(group)}
+          toast={(m) => showToast(m)}
+          fail={fail}
+        />
+      )}
+
+      {form && group && (
+        <PlanForm
+          t={t}
+          lang={lang}
+          me={me}
+          groupId={group.id}
+          members={members}
+          plan={form.plan}
+          draft={form.draft}
+          onClose={() => setForm(null)}
+          fail={fail}
+          onSaved={async (id, created, multi) => {
+            setForm(null);
+            if (created) api.notify(multi ? 'vote' : 'invited', id);
+            await loadGroupData(group);
+            setTab('plans');
+            setOpenPlan(id);
+          }}
+        />
+      )}
 
       {sheet === 'groups' && (
         <GroupsSheet
@@ -411,7 +492,19 @@ function Main({ profile, lang, setLang, t }: { profile: Profile; lang: Lang; set
             <Avatar p={profile} />
             <span className="big">{profile.display_name}</span>
           </div>
-          <button className="btn block" style={{ marginTop: 16 }} onClick={() => api.signOut()}>
+          <label className="toggle-row">
+            <input
+              type="checkbox"
+              checked={profile.email_opt_in !== false}
+              onChange={async (e) => {
+                const p = { ...profile, email_opt_in: e.target.checked };
+                setProfile(p);
+                await api.saveProfile(p).catch(fail);
+              }}
+            />
+            <span className="small">{t.emailNotif}</span>
+          </label>
+          <button className="btn block" style={{ marginTop: 8 }} onClick={() => api.signOut()}>
             {t.signOut}
           </button>
         </Sheet>
