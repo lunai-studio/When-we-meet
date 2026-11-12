@@ -9,7 +9,7 @@ const copy = {
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
-  if (req.headers.get('x-cron-secret') !== Deno.env.get('CRON_SECRET')) return new Response('forbidden', { status: 403 });
+  if (req.headers.get('x-cron-secret') !== Deno.env.get('WHENWEMEET_CRON_SECRET')) return new Response('forbidden', { status: 403 });
   try {
     const db = admin();
     const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();

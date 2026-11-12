@@ -2,7 +2,7 @@
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.45.0';
 
 export const admin = (): SupabaseClient =>
-  createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } });
+  createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false }, db: { schema: 'whenwemeet' } });
 
 export const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -42,9 +42,9 @@ ${lines.map((l) => `<p style="margin:0 0 10px;color:#C9C8D6;line-height:1.5">${e
 }
 
 export async function send(to: string, subject: string, html: string) {
-  const key = Deno.env.get('RESEND_API_KEY');
-  const from = Deno.env.get('FROM_EMAIL') ?? 'WhenWeMeet <onboarding@resend.dev>';
-  if (!key) throw new Error('RESEND_API_KEY not set');
+  const key = Deno.env.get('WHENWEMEET_RESEND_API_KEY');
+  const from = Deno.env.get('WHENWEMEET_FROM_EMAIL') ?? 'WhenWeMeet <onboarding@resend.dev>';
+  if (!key) throw new Error('WHENWEMEET_RESEND_API_KEY not set');
   const r = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
@@ -53,7 +53,7 @@ export async function send(to: string, subject: string, html: string) {
   if (!r.ok) throw new Error(`Resend ${r.status}: ${await r.text()}`);
 }
 
-export const appUrl = (fallback?: string) => Deno.env.get('APP_URL') ?? fallback ?? 'https://lunai-studio.github.io/When-we-meet/';
+export const appUrl = (fallback?: string) => Deno.env.get('WHENWEMEET_APP_URL') ?? fallback ?? 'https://lunai-studio.github.io/When-we-meet/';
 
 const fmtDate = (d: string, lang: 'en' | 'es') =>
   new Date(d + 'T12:00:00Z').toLocaleDateString(lang === 'es' ? 'es-ES' : 'en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });

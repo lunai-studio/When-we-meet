@@ -25,6 +25,10 @@ export interface Api {
   signInEmail(email: string): Promise<void>;
   signInGoogle(): Promise<void>;
   signOut(): Promise<void>;
+  /** false = signed in with an account that isn't registered for WhenWeMeet (shared Lunai auth) */
+  hasAccess(): Promise<boolean>;
+  /** Google sign-in is shown only when VITE_GOOGLE_ENABLED is set */
+  googleEnabled: boolean;
   getProfile(uid: string): Promise<Profile | null>;
   saveProfile(p: Profile): Promise<void>;
   myGroups(): Promise<(Group & { calendar_mode: CalMode })[]>;
@@ -51,10 +55,13 @@ export interface Api {
 }
 
 const URL_ = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+// Shared Lunai project: publishable key + our own schema (see supabase/schema.sql).
+const KEY = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? import.meta.env.VITE_SUPABASE_ANON_KEY) as string | undefined;
+export const APP = 'whenwemeet';
+const GOOGLE = !!import.meta.env.VITE_GOOGLE_ENABLED;
 const wantDemo = new URLSearchParams(location.search).has('demo');
 
-export const api: Api = !URL_ || !KEY || wantDemo ? makeDemoApi() : makeSupabaseApi(createClient(URL_, KEY));
+export const api: Api = !URL_ || !KEY || wantDemo ? makeDemoApi() : makeSupabaseApi(createClient(URL_, KEY, { db: { schema: APP } }));
 
 const hhmm = (t?: string | null) => (t ? t.slice(0, 5) : null);
 const markOf = (r: { status: DayMark['status']; slot: DayMark['slot']; time_from?: string | null; time_to?: string | null; plan_id?: string | null }): DayMark => ({
@@ -69,7 +76,8 @@ const markOf = (r: { status: DayMark['status']; slot: DayMark['slot']; time_from
 
 type Row = Record<string, unknown>;
 
-function makeSupabaseApi(sb: SupabaseClient): Api {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function makeSupabaseApi(sb: SupabaseClient<any, any, any>): Api {
   let me: string | null = null;
   const uid = async () => (me = (await sb.auth.getSession()).data.session?.user.id ?? null);
   const must = <T>(r: { data: T; error: { message: string } | null }) => {
@@ -107,12 +115,12 @@ function makeSupabaseApi(sb: SupabaseClient): Api {
       };
       const ch = sb
         .channel('g-' + gid)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'availability' }, fire)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'plans', filter: `group_id=eq.${gid}` }, fire)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'plan_responses' }, fire)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'plan_votes' }, fire)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'comments' }, fire)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'group_members', filter: `group_id=eq.${gid}` }, fire)
+        .on('postgres_changes', { event: '*', schema: APP, table: 'availability' }, fire)
+        .on('postgres_changes', { event: '*', schema: APP, table: 'plans', filter: `group_id=eq.${gid}` }, fire)
+        .on('postgres_changes', { event: '*', schema: APP, table: 'plan_responses' }, fire)
+        .on('postgres_changes', { event: '*', schema: APP, table: 'plan_votes' }, fire)
+        .on('postgres_changes', { event: '*', schema: APP, table: 'comments' }, fire)
+        .on('postgres_changes', { event: '*', schema: APP, table: 'group_members', filter: `group_id=eq.${gid}` }, fire)
         .subscribe();
       return () => {
         clearTimeout(t);
@@ -120,7 +128,8 @@ function makeSupabaseApi(sb: SupabaseClient): Api {
       };
     },
     signInEmail: async (email) => {
-      const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: redirect() } });
+      // data.app registers new users for this app (trigger -> public.app_memberships). Auth is shared by all Lunai apps.
+      const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: redirect(), data: { app: APP } } });
       if (error) throw new Error(error.message);
     },
     signInGoogle: async () => {
@@ -130,6 +139,8 @@ function makeSupabaseApi(sb: SupabaseClient): Api {
     signOut: async () => {
       await sb.auth.signOut();
     },
+    hasAccess: async () => !!must(await sb.rpc('has_access')),
+    googleEnabled: GOOGLE,
     getProfile: async (id) => must(await sb.from('profiles').select('*').eq('id', id).maybeSingle()) as Profile | null,
     saveProfile: async (p) => {
       must(await sb.from('profiles').upsert(p));
@@ -295,7 +306,7 @@ function makeSupabaseApi(sb: SupabaseClient): Api {
     notify: async (kind, planId) => {
       // Best effort: emails are optional and must never block the app.
       try {
-        await sb.functions.invoke('notify', { body: { kind, plan_id: planId, app_url: redirect() } });
+        await sb.functions.invoke('whenwemeet-notify', { body: { kind, plan_id: planId, app_url: redirect() } });
       } catch {
         /* function not deployed */
       }
@@ -391,6 +402,8 @@ function makeDemoApi(): Api {
 
   return {
     demo: true,
+    hasAccess: async () => true,
+    googleEnabled: true,
     currentUserId: async () => (signedIn ? me : null),
     onAuthChange: (cb) => listeners.push(cb),
     watchGroup: () => () => {},

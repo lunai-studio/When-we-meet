@@ -14,7 +14,7 @@ Find the days your friends are free. Mobile-first web app, EN/ES.
 
 Not included: Google Places autocomplete (needs a paid Google API key; the place field works with names, addresses and pasted links).
 
-Stack: Vite + React + TypeScript on GitHub Pages, Supabase for auth and Postgres (row-level security keeps groups private).
+Stack: Vite + React + TypeScript on GitHub Pages, Supabase (shared Lunai project, schema `whenwemeet`) for auth and Postgres; row-level security keeps groups private.
 
 ## Try it without a backend
 
@@ -25,37 +25,41 @@ npm install
 npm run dev        # http://localhost:5173/When-we-meet/
 ```
 
-## Set up Supabase (once, ~10 minutes)
+## Supabase (shared Lunai project)
 
-1. Create a free project at supabase.com (region: Frankfurt is closest to Prague).
-2. **SQL Editor** → paste `supabase/schema.sql` → Run.
-3. **Authentication → URL Configuration**
-   - Site URL: `https://lunai-studio.github.io/When-we-meet/`
-   - Redirect URLs: add the same URL, plus `http://localhost:5173/When-we-meet/` for local work.
-4. Email magic link works out of the box. Supabase's built-in mailer is rate-limited (a few emails per hour); for real use add your own SMTP under **Authentication → Emails** (Resend free tier works).
-5. *(Optional)* Google sign-in: **Authentication → Providers → Google**, paste a Google OAuth client ID/secret. Until then the Google button will show an error; email works.
-6. **Project Settings → API**: copy the Project URL and the `anon` public key.
+WhenWeMeet runs in Lunai's shared Supabase project **lunai-apps** (org Lunai Dev, ref `ilcmaabjczttmrzsxfeu`, eu-central-1), next to other Lunai apps. Rules:
 
-## Emails (optional, ~10 minutes)
+- Everything of this app lives in the schema **`whenwemeet`** (tables, `create_group` / `join_group` / `has_access` RPCs). RLS helpers and triggers live in **`whenwemeet_private`**, which is not exposed through the API. Nothing in `public`, nothing that depends on other apps' schemas.
+- Every policy also checks `private.is_app_member('whenwemeet')`. Auth is shared: sign-in sends `data: { app: 'whenwemeet' }`, and a trigger registers new users for this app.
+- Schema changes only as migrations named `whenwemeet_*`; run the security advisors afterwards. `supabase/schema.sql` is the full current schema.
+- Edge Functions and secrets carry the prefix: `whenwemeet-notify`, `whenwemeet-digest`, `WHENWEMEET_*`.
 
-The app works without this; people just won't get emails.
+**One-time settings in the dashboard** (can't be done from SQL):
+1. **Settings → Data API → Exposed schemas**: add `whenwemeet` (not `whenwemeet_private`).
+2. **Authentication → URL Configuration → Redirect URLs**: add `https://lunai-studio.github.io/When-we-meet/**` and `http://localhost:5173/When-we-meet/**`. Don't change the Site URL; other apps share it.
+3. Auth emails (magic link) use the project's shared templates and SMTP.
 
-1. Create a free account at resend.com and an API key. To send from your own address, verify a domain there; otherwise Resend only delivers to your own email.
-2. Install the Supabase CLI, then from this repo:
-   ```bash
-   supabase login
-   supabase link --project-ref YOUR-PROJECT
-   supabase secrets set RESEND_API_KEY=re_xxx FROM_EMAIL="WhenWeMeet <hola@yourdomain.com>" \
-     APP_URL=https://lunai-studio.github.io/When-we-meet/ CRON_SECRET=some-long-random-string
-   supabase functions deploy notify
-   supabase functions deploy digest
-   ```
-3. Daily comment digest: enable the `pg_cron` and `pg_net` extensions, fill in `supabase/cron.sql` and run it in the SQL Editor.
+**Known limits (accepted for now)**
+- Same email = same account across Lunai apps. An email first registered in another Lunai app isn't a WhenWeMeet user; the app shows a "not set up for WhenWeMeet" screen.
+- Google sign-in is hidden until `VITE_GOOGLE_ENABLED` is set. Google sign-ups can't send `data.app`, so they also need a way to register for the app (pending decision).
+
+## Emails (optional)
+
+Both functions are deployed. They stay silent until these secrets exist (**Edge Functions → Secrets**):
+
+```
+WHENWEMEET_RESEND_API_KEY=re_xxx
+WHENWEMEET_FROM_EMAIL="WhenWeMeet <hola@yourdomain.com>"
+WHENWEMEET_APP_URL=https://lunai-studio.github.io/When-we-meet/
+WHENWEMEET_CRON_SECRET=some-long-random-string
+```
+
+Daily comment digest: with `pg_cron` and `pg_net` enabled, fill in the secret in `supabase/cron.sql` and run it.
 
 ## Deploy to GitHub Pages
 
 1. Repo **Settings → Pages** → Source: **GitHub Actions**.
-2. Repo **Settings → Secrets and variables → Actions → Variables**: add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (the anon key is public by design; RLS protects the data).
+2. Repo **Settings → Secrets and variables → Actions → Variables**: `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` (values in `.env.example`; public by design, RLS protects the data). Optional: `VITE_GOOGLE_ENABLED=1`.
 3. Push to `main` (or run the workflow by hand). The site goes to `https://lunai-studio.github.io/When-we-meet/`.
 
 Invite links look like `https://lunai-studio.github.io/When-we-meet/?join=<code>`; the code survives the sign-in redirect.
@@ -72,6 +76,6 @@ Invite links look like `https://lunai-studio.github.io/When-we-meet/?join=<code>
 | `plan_invites`, `plan_responses`, `plan_votes` | who's invited, I'm in / Maybe / Can't, date votes |
 | `comments` | plan comment threads |
 
-Groups are created and joined only through the `create_group` / `join_group` functions. Members see each other's profiles, the calendar each member uses in that group, and the group's plans. Nobody can write someone else's days, answers or votes; only invitees answer or vote; only the creator edits, confirms or deletes a plan. Busy marks from plans are written by a database trigger (`refresh_plan_busy`).
+Groups are created and joined only through the `create_group` / `join_group` functions. Members see each other's profiles, the calendar each member uses in that group, and the group's plans. Nobody can write someone else's days, answers or votes; only invitees answer or vote; only the creator edits, confirms or deletes a plan. Busy marks from plans are written by a database trigger (`whenwemeet_private.refresh_plan_busy`).
 
 Known trade-off: a day holds one mark per calendar, so accepting a plan replaces a Free mark on that day, and it doesn't come back if you later change your answer.

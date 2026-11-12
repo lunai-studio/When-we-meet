@@ -29,7 +29,7 @@ const codeFrom = (s: string) => {
 };
 
 export default function App() {
-  const [phase, setPhase] = useState<'loading' | 'login' | 'onboard' | 'ready'>('loading');
+  const [phase, setPhase] = useState<'loading' | 'login' | 'noaccess' | 'onboard' | 'ready'>('loading');
   const [uid, setUid] = useState<string | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [lang, setLang] = useState<Lang>(browserLang());
@@ -39,6 +39,7 @@ export default function App() {
     const id = await api.currentUserId();
     setUid(id);
     if (!id) return setPhase('login');
+    if (!(await api.hasAccess())) return setPhase('noaccess');
     const p = await api.getProfile(id);
     setProfile(p);
     if (p) setLang(p.language);
@@ -52,6 +53,16 @@ export default function App() {
 
   if (phase === 'loading') return <div className="app center muted">…</div>;
   if (phase === 'login') return <Login lang={lang} setLang={setLang} />;
+  if (phase === 'noaccess')
+    return (
+      <div className="app center stack">
+        <h1>WhenWeMeet</h1>
+        <div className="card">{t.noAccess}</div>
+        <button className="btn block" onClick={() => api.signOut()}>
+          {t.signOut}
+        </button>
+      </div>
+    );
   if (phase === 'onboard')
     return (
       <Onboard
@@ -128,12 +139,16 @@ function Login({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) {
           >
             <input className="input" type="email" required placeholder={t.emailPlaceholder} value={email} onChange={(e) => setEmail(e.target.value)} />
             <button className="btn primary block">{t.sendLink}</button>
-            <div className="label" style={{ textAlign: 'center' }}>
-              {t.or}
-            </div>
-            <button type="button" className="btn block" onClick={() => api.signInGoogle().catch((x) => setErr(x.message))}>
-              {t.google}
-            </button>
+            {api.googleEnabled && (
+              <>
+                <div className="label" style={{ textAlign: 'center' }}>
+                  {t.or}
+                </div>
+                <button type="button" className="btn block" onClick={() => api.signInGoogle().catch((x) => setErr(x.message))}>
+                  {t.google}
+                </button>
+              </>
+            )}
           </form>
         )}
         {err && <p style={{ color: 'var(--busy)' }}>{err}</p>}

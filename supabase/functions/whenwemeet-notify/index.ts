@@ -32,6 +32,7 @@ Deno.serve(async (req) => {
     const caller = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
       global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } },
       auth: { persistSession: false },
+      db: { schema: 'whenwemeet' },
     });
     const { data: who } = await caller.auth.getUser();
     if (!who.user) return new Response('unauthorized', { status: 401, headers: cors });
