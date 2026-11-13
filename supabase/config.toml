@@ -1,0 +1,7 @@
+# Used by `supabase functions deploy`. Function names carry the app prefix (shared Lunai project).
+[functions.whenwemeet-notify]
+verify_jwt = true
+
+[functions.whenwemeet-digest]
+# Called by pg_cron with x-cron-secret instead of a user token.
+verify_jwt = false

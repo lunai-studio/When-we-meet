@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import type { CalMode, Calendar, DayMark, Group, Lang, Member, Slot, Status } from './types';
+import type { CalMode, Calendar, DayMark, Group, Lang, Member, Status, TimeSlot } from './types';
 import { MonthGrid } from './MonthGrid';
 import { prettyDate, sixMonths, todayIso, weekdayLong } from './dates';
-import { statusColor } from './logic';
+import { sameMark as same, shortSlot, statusColor } from './logic';
+import { SlotPicker } from './Plans';
 import type { T } from './i18n';
 import { Avatar, Sheet } from './ui';
 
@@ -23,7 +24,6 @@ interface Props {
   sync: (dir: 'toGroup' | 'toMain') => Promise<void>;
 }
 
-const same = (a?: DayMark | null, b?: DayMark | null) => (!a && !b) || (!!a && !!b && a.status === b.status && a.slot === b.slot);
 const diffCount = (a: Calendar, b: Calendar) => new Set([...Object.keys(a), ...Object.keys(b)].filter((d) => !same(a[d], b[d]))).size;
 
 export function CalendarTab(p: Props) {
@@ -34,7 +34,7 @@ export function CalendarTab(p: Props) {
     Object.fromEntries(months.map((x, i) => [`${x.y}-${x.m}`, i < 2])),
   );
   const [tool, setTool] = useState<Tool>('free');
-  const [slot, setSlot] = useState<Slot>('all');
+  const [slot, setSlot] = useState<TimeSlot>({ slot: 'all' });
   const [daySheet, setDaySheet] = useState<string | null>(null);
   const [repeatOpen, setRepeatOpen] = useState(false);
   const [clearArmed, setClearArmed] = useState(false);
@@ -46,7 +46,8 @@ export function CalendarTab(p: Props) {
     return () => clearTimeout(id);
   }, [clearArmed]);
 
-  const markFor = (): DayMark | null => (tool === 'erase' ? null : { status: tool, slot: tool === 'away' ? 'all' : slot });
+  const markFor = (): DayMark | null =>
+    tool === 'erase' ? null : tool === 'away' ? { status: 'away', slot: 'all' } : { status: tool, ...slot, time_from: slot.slot === 'custom' ? slot.time_from : null, time_to: slot.slot === 'custom' ? slot.time_to : null };
 
   const onMark = (dates: string[], isDrag: boolean) => {
     const target = markFor();
@@ -179,15 +180,7 @@ export function CalendarTab(p: Props) {
                 </button>
               ))}
             </div>
-            {(tool === 'free' || tool === 'busy') && (
-              <div className="seg slots">
-                {(['all', 'am', 'pm'] as Slot[]).map((s) => (
-                  <button key={s} className={slot === s ? 'on' : ''} onClick={() => setSlot(s)}>
-                    {s === 'all' ? t.allDay : s === 'am' ? t.am : t.pm}
-                  </button>
-                ))}
-              </div>
-            )}
+            {(tool === 'free' || tool === 'busy') && <SlotPicker t={t} value={slot} onChange={setSlot} compact />}
           </div>
         </div>
       )}
@@ -211,7 +204,7 @@ export function CalendarTab(p: Props) {
                     </span>
                     <span className={'pill ' + (mk?.status ?? '')}>
                       {mk ? (mk.status === 'free' ? t.free : mk.status === 'busy' ? t.busy : t.away) : t.notMarked}
-                      {mk && mk.slot !== 'all' ? ' · ' + mk.slot.toUpperCase() : ''}
+                      {mk && mk.slot !== 'all' ? ' · ' + shortSlot(mk) : ''}
                     </span>
                   </div>
                 ))}
@@ -228,7 +221,7 @@ export function CalendarTab(p: Props) {
             {t.repeatHint}:{' '}
             <b style={{ color: tool === 'erase' ? 'var(--text)' : statusColor[tool] }}>
               {tools.find((x) => x.k === tool)!.label}
-              {(tool === 'free' || tool === 'busy') && slot !== 'all' ? ' · ' + slot.toUpperCase() : ''}
+              {(tool === 'free' || tool === 'busy') && slot.slot !== 'all' ? ' · ' + shortSlot(slot) : ''}
             </b>
           </p>
           {weekdayLong(lang).map((w, i) => (

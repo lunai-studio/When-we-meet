@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Calendar, Lang, Member } from './types';
 import { monthCells, monthName, todayIso, weekdayShort } from './dates';
-import { bestSlot, statusColor } from './logic';
+import { bestSlot, shortSlot, statusColor } from './logic';
 import type { T } from './i18n';
 
 interface Props {
@@ -160,7 +160,7 @@ export function MonthGrid(p: Props) {
                   }}
                 >
                   {num}
-                  {mk && mk.slot !== 'all' && <span className="slot">{mk.slot.toUpperCase()}</span>}
+                  {mk && mk.slot !== 'all' && <span className="slot">{shortSlot(mk)}</span>}
                 </button>
               );
             }
